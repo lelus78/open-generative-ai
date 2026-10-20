@@ -160,6 +160,12 @@ async function installWan2gp({ dataDir, dir, downloadFile, send }) {
         await run(uvPath, ['pip', 'install', '--python', venvPython, '-r', path.join(installDir, 'requirements.txt')],
             { env: uvEnv, cwd: installDir, onLine: (l) => detail(6, l) });
 
+        if (torch.index.endsWith('cu130')) {
+            // 4-bit (NF4) checkpoints such as Ideogram v4 need these kernels; they match PyTorch 2.10 / CUDA 13.
+            detail(6, 'installing NF4 kernels (bitsandbytes)');
+            await run(uvPath, ['pip', 'install', '--python', venvPython, 'bitsandbytes==0.49.2'], { env: uvEnv, onLine: (l) => detail(6, l) });
+        }
+
         detail(6, 'verifying GPU access');
         await run(venvPython, ['-c', 'import torch; raise SystemExit(0 if torch.cuda.is_available() else 3)'])
             .catch(() => { throw new Error('PyTorch was installed but cannot see the GPU. Update the NVIDIA driver and retry.'); });

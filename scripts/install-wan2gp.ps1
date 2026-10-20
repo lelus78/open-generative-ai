@@ -67,6 +67,12 @@ Step 'Installing Wan2GP requirements'
 & $venvPy -m pip install -r (Join-Path $Dir 'requirements.txt')
 if ($LASTEXITCODE -ne 0) { Fail 'requirements install failed' }
 
+if ($torchIndex.EndsWith('cu130')) {
+    Step 'Installing NF4 kernels (bitsandbytes, needed by Ideogram v4)'
+    & $venvPy -m pip install bitsandbytes==0.49.2
+    if ($LASTEXITCODE -ne 0) { Write-Host 'bitsandbytes failed to install - NF4 models will not run.' -ForegroundColor Yellow }
+}
+
 Step 'Verifying GPU access'
 & $venvPy -c "import torch; print('torch', torch.__version__, '| CUDA available:', torch.cuda.is_available()); raise SystemExit(0 if torch.cuda.is_available() else 1)"
 if ($LASTEXITCODE -ne 0) { Fail 'PyTorch cannot see the GPU. Update the NVIDIA driver and re-run.' }

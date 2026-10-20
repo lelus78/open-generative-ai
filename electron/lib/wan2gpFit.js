@@ -7,6 +7,10 @@
 //   minRamGB      system RAM needed for the offloaded weights
 //   downloadGB    approximate size of everything a first run downloads
 const REQUIREMENTS = {
+    ideogram4_nf4:         { minVramGB: 8,  comfortVramGB: 12, minRamGB: 24, downloadGB: 14 },
+    krea2_turbo:           { minVramGB: 12, comfortVramGB: 16, minRamGB: 32, downloadGB: 22 },
+    flux_chroma_radiance:  { minVramGB: 8,  comfortVramGB: 12, minRamGB: 24, downloadGB: 16 },
+    hidream_o1_dev_2604:   { minVramGB: 12, comfortVramGB: 16, minRamGB: 32, downloadGB: 20 },
     flux:                  { minVramGB: 8,  comfortVramGB: 12, minRamGB: 16, downloadGB: 17 },
     qwen_image_20B:        { minVramGB: 12, comfortVramGB: 24, minRamGB: 32, downloadGB: 28 },
     't2v_1.3B':            { minVramGB: 6,  comfortVramGB: 8,  minRamGB: 16, downloadGB: 10 },
