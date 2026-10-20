@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, createTranslateToggle, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
@@ -472,6 +472,8 @@ export function VideoStudio() {
             textarea.placeholder = t('video.placeholder');
         };
         controlsLeft.appendChild(localToggleBtn);
+        const translateBtn = createTranslateToggle();
+        if (translateBtn) controlsLeft.appendChild(translateBtn);
 
         // Reopen in the mode used last time (needs the container mounted, so wait for it).
         const restoreLastMode = (tries = 40) => {
@@ -1140,6 +1142,7 @@ export function VideoStudio() {
             historySidebar.classList.remove('translate-x-full', 'opacity-0');
             historySidebar.classList.add('translate-x-0', 'opacity-100');
             renderHistory();
+            hydrateHistory(generationHistory, 'video_history', 30, renderHistory);
         }
     } catch (e) { /* ignore */ }
 

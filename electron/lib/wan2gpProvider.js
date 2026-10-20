@@ -307,6 +307,12 @@ function register() {
         if (active) throw new Error('Wait for the running generation to finish first.');
         return outputStore.deleteRunContaining(RUNS_DIR, filePath);
     });
+    // Re-read a saved result (history after a restart). Only files inside the runs folder are served.
+    ipcMain.handle('wan2gp:read-output', (_, filePath) => {
+        const relative = path.relative(path.resolve(RUNS_DIR), path.resolve(String(filePath || '')));
+        if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(filePath)) return null;
+        return mediaResult(filePath).url;
+    });
     ipcMain.handle('wan2gp:storage-usage', () => outputStore.usage({ runsDir: RUNS_DIR, inputsDir: INPUTS_DIR }));
     ipcMain.handle('wan2gp:clear-outputs', () => {
         if (active) throw new Error('Wait for the running generation to finish first.');

@@ -137,13 +137,34 @@ export function attachMediaDrop({ container, textarea, image, video, audio }) {
  * generations, so those stay in memory for the session and only regular URLs are saved.
  */
 export function saveHistory(storageKey, entries, max) {
-    const persistable = entries.filter(e => !String(e?.url || '').startsWith('data:')).slice(0, max);
+    // Inline results that live in a file on disk are saved without the image; hydrateHistory() reads it back.
+    const persistable = entries
+        .filter(e => !String(e?.url || '').startsWith('data:') || e.path)
+        .map(e => (String(e.url || '').startsWith('data:') ? { ...e, url: '' } : e))
+        .slice(0, max);
     for (const list of [persistable, persistable.slice(0, 10), []]) {
         try {
             localStorage.setItem(storageKey, JSON.stringify(list));
             return;
         } catch { /* quota exceeded: retry with a shorter list */ }
     }
+}
+
+/**
+ * After a restart: entries saved without their image get it back from the file on disk.
+ * Entries whose file is gone are removed. Calls `onChange` when something was filled in or dropped.
+ */
+export async function hydrateHistory(entries, storageKey, max, onChange) {
+    const pending = entries.filter(e => !e.url && e.path);
+    if (!pending.length) return;
+    for (const entry of pending) {
+        let url = null;
+        try { url = await window.localAI?.wan2gp?.readOutput(entry.path); } catch { /* unreadable */ }
+        if (url) entry.url = url;
+        else { const i = entries.indexOf(entry); if (i >= 0) entries.splice(i, 1); }
+    }
+    saveHistory(storageKey, entries, max);
+    onChange?.();
 }
 
 export const TRASH_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>';
@@ -250,4 +271,77 @@ export function localProgressLabel({ status, step, totalSteps, downloadedBytes, 
     if (status === 'decoding') return t('video.localDecoding');
     if (status === 'saving' || status === 'done') return t('video.localSaving');
     return message || t('video.localStarting');
+}
+
+/**
+ * Small button that switches local prompt translation on/off (same setting as Settings → Local Models).
+ * Returns null outside Electron, where nothing is translated locally.
+ */
+export function createTranslateToggle() {
+    const api = window.localAI;
+    if (!api?.getSettings) return null;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    let enabled = true;
+    const paint = () => {
+        btn.className = `flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-xs font-bold whitespace-nowrap ${enabled
+            ? 'bg-primary/20 border-primary/40 text-primary'
+            : 'bg-white/5 border-white/5 text-white/50 hover:bg-white/10'}`;
+        btn.textContent = enabled ? t('translate.on') : t('translate.off');
+        btn.title = t('translate.help');
+    };
+    paint();
+    api.getSettings().then(s => { enabled = !!s.translatePrompts; paint(); }).catch(() => {});
+    btn.onclick = async (e) => {
+        e.stopPropagation();
+        enabled = !enabled;
+        paint();
+        try { await api.setSettings({ translatePrompts: enabled }); } catch { /* keep UI state */ }
+    };
+    return btn;
+}
+
+/**
+ * Click an image to open it full size: mouse wheel zooms, drag pans, double-click toggles 1x/2.5x,
+ * Esc or a click on the dark area closes.
+ */
+export function attachImageZoom(img) {
+    img.style.cursor = 'zoom-in';
+    img.addEventListener('click', () => {
+        if (!img.src) return;
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-[10000] bg-black/90 flex items-center justify-center overflow-hidden select-none';
+        const big = document.createElement('img');
+        big.src = img.src;
+        big.draggable = false;
+        big.className = 'max-w-[95vw] max-h-[95vh] object-contain';
+        big.style.cursor = 'grab';
+        overlay.appendChild(big);
+
+        let scale = 1; let x = 0; let y = 0;
+        const apply = () => { big.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; };
+        const reset = () => { scale = 1; x = 0; y = 0; apply(); };
+        const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey, true); };
+        const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+        document.addEventListener('keydown', onKey, true);
+
+        overlay.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const next = Math.min(12, Math.max(1, scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+            scale = next;
+            if (scale === 1) { x = 0; y = 0; }
+            apply();
+        }, { passive: false });
+        let drag = null;
+        big.addEventListener('mousedown', (e) => { e.preventDefault(); drag = { sx: e.clientX - x, sy: e.clientY - y, moved: false }; big.style.cursor = 'grabbing'; });
+        window.addEventListener('mousemove', function move(e) {
+            if (!overlay.isConnected) { window.removeEventListener('mousemove', move); return; }
+            if (!drag) return;
+            drag.moved = true; x = e.clientX - drag.sx; y = e.clientY - drag.sy; apply();
+        });
+        window.addEventListener('mouseup', () => { drag = null; big.style.cursor = 'grab'; });
+        big.addEventListener('dblclick', () => { if (scale > 1) reset(); else { scale = 2.5; apply(); } });
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+        document.body.appendChild(overlay);
+    });
 }

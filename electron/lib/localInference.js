@@ -702,9 +702,18 @@ async function generate(params, mainWindow) {
             try {
                 const imgBuffer = fs.readFileSync(outPath);
                 const dataUrl = `data:image/png;base64,${imgBuffer.toString('base64')}`;
+                // Kept in the same folder as Wan2GP results: it makes the history survive a restart,
+                // and "Delete" / "Delete all" / the usage figure already cover that folder.
+                let savedPath;
+                try {
+                    const runDir = path.join(DATA_DIR, 'wan2gp', 'runs', `sd-${Date.now()}`);
+                    fs.mkdirSync(runDir, { recursive: true });
+                    savedPath = path.join(runDir, 'image.png');
+                    fs.writeFileSync(savedPath, imgBuffer);
+                } catch { savedPath = undefined; }
                 fs.unlinkSync(outPath);
                 send({ step: steps, totalSteps: steps, status: 'done', progress: 1 });
-                resolve({ url: dataUrl, seed, translatedPrompt: translated.translatedPrompt });
+                resolve({ url: dataUrl, seed, translatedPrompt: translated.translatedPrompt, ...(savedPath ? { path: savedPath } : {}) });
             } catch (err) {
                 reject(err);
             }

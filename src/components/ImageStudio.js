@@ -11,7 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, createTranslateToggle, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
@@ -242,6 +242,8 @@ export function ImageStudio() {
             }
         };
         controlsLeft.appendChild(localToggleBtn);
+        const translateBtn = createTranslateToggle();
+        if (translateBtn) controlsLeft.appendChild(translateBtn);
 
         // Reopen in the mode used last time (needs the container mounted, so wait for it).
         const restoreLastMode = (tries = 40) => {
@@ -1022,6 +1024,7 @@ export function ImageStudio() {
     const resultImg = document.createElement('img');
     resultImg.className = 'max-h-[60vh] max-w-[80vw] rounded-3xl shadow-3xl border border-white/10 interactive-glow object-contain';
     imageContainer.appendChild(resultImg);
+    attachImageZoom(resultImg);
 
     // Canvas Controls
     const canvasControls = document.createElement('div');
@@ -1118,6 +1121,7 @@ export function ImageStudio() {
             historySidebar.classList.remove('translate-x-full', 'opacity-0');
             historySidebar.classList.add('translate-x-0', 'opacity-100');
             renderHistory();
+            hydrateHistory(generationHistory, 'muapi_history', 50, renderHistory);
         }
     } catch (e) { /* ignore */ }
 

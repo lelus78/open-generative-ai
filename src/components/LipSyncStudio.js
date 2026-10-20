@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, createTranslateToggle, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -523,6 +523,8 @@ export function LipSyncStudio() {
             updateUIForMode();
         };
         bottomRow.insertBefore(localToggleBtn, modelBtn);
+        const translateBtn = createTranslateToggle();
+        if (translateBtn) bottomRow.insertBefore(translateBtn, modelBtn);
 
         // Reopen in the mode used last time (needs the container mounted, so wait for it).
         const restoreLastMode = (tries = 40) => {
@@ -677,6 +679,7 @@ export function LipSyncStudio() {
             historySidebar.classList.remove('translate-x-full', 'opacity-0');
             historySidebar.classList.add('translate-x-0', 'opacity-100');
             renderHistory();
+            hydrateHistory(generationHistory, 'lipsync_history', 30, renderHistory);
         }
     } catch { /* ignore */ }
 

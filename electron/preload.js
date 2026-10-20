@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('localAI', {
         pickFolder: () => ipcRenderer.invoke('wan2gp:pick-folder'),
         install:    () => ipcRenderer.invoke('wan2gp:install'),
         deleteOutput: (filePath) => ipcRenderer.invoke('wan2gp:delete-output', filePath),
+        readOutput: (filePath) => ipcRenderer.invoke('wan2gp:read-output', filePath),
         storageUsage: () => ipcRenderer.invoke('wan2gp:storage-usage'),
         clearOutputs: () => ipcRenderer.invoke('wan2gp:clear-outputs'),
         probe:      (url) => ipcRenderer.invoke('wan2gp:probe', url),
