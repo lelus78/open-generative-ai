@@ -429,7 +429,7 @@ function getAuxState(aux) {
 
 async function listModels() {
     const { LOCAL_MODEL_CATALOG, ZIMAGE_AUXILIARY } = require('./modelCatalog');
-    const { rateAgainst, sdRequirements } = require('./wan2gpFit');
+    const { rateAgainst, sdRequirements, shouldDemoteLegacy } = require('./wan2gpFit');
     const hardware = await getHardwareProfile(MODELS_DIR);
     const auxStatus = {
         llm: getAuxState(ZIMAGE_AUXILIARY.llm),
@@ -454,6 +454,7 @@ async function listModels() {
             fit: rated.fit,
             fitReason: rated.reason,
             downloadGB: rated.downloadGB,
+            legacyDemoted: !!m.legacy && shouldDemoteLegacy(hardware),
         };
     });
 }

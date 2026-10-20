@@ -69,3 +69,14 @@ test('a remote engine is never judged against this PC', () => {
     assert.equal(r.ready, true);
     assert.equal(r.fit, undefined);
 });
+
+test('legacy models are only demoted on GPUs with enough VRAM for newer ones', () => {
+    const { shouldDemoteLegacy } = require('../electron/lib/wan2gpFit');
+    const model = { id: 'wan2gp:chroma-radiance', modelType: 'flux_chroma_radiance', legacy: true };
+    const status = new Map([['flux_chroma_radiance', 'installed']]);
+    assert.equal(shouldDemoteLegacy(big), true);
+    assert.equal(shouldDemoteLegacy(small), false);
+    assert.equal(shouldDemoteLegacy(null), false);
+    assert.equal(withWan2gpAvailability(model, { ok: true, mode: 'local', hardware: big, modelStatus: status }).legacyDemoted, true);
+    assert.equal(withWan2gpAvailability(model, { ok: true, mode: 'local', hardware: small, modelStatus: status }).legacyDemoted, false);
+});

@@ -63,6 +63,7 @@ const LOCAL_MODEL_CATALOG = [
     // ── Classic SD 1.5 models ───────────────────────────────────────────────
     {
         id: 'dreamshaper-8',
+        legacy: true,
         name: 'Dreamshaper 8',
         description: 'Versatile SD 1.5 model — great for portraits, landscapes, and artistic styles.',
         type: 'sd1',
@@ -79,6 +80,7 @@ const LOCAL_MODEL_CATALOG = [
     },
     {
         id: 'realistic-vision-v51',
+        legacy: true,
         name: 'Realistic Vision v5.1',
         description: 'Highly photorealistic people and scenes, based on SD 1.5.',
         type: 'sd1',
@@ -95,6 +97,7 @@ const LOCAL_MODEL_CATALOG = [
     },
     {
         id: 'anything-v5',
+        legacy: true,
         name: 'Anything v5',
         description: 'High quality anime and illustration style image generation.',
         type: 'sd1',
@@ -112,6 +115,7 @@ const LOCAL_MODEL_CATALOG = [
     // ── SDXL ───────────────────────────────────────────────────────────────
     {
         id: 'stable-diffusion-xl-base',
+        legacy: true,
         name: 'SDXL Base 1.0',
         description: 'Official Stable Diffusion XL base model — higher resolution, excellent quality.',
         type: 'sdxl',

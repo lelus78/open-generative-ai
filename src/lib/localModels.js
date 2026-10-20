@@ -159,6 +159,7 @@ export const LOCAL_MODEL_CATALOG = [
     },
     {
         id: 'wan2gp:chroma-radiance',
+        legacy: true,
         name: 'Chroma Radiance 8.9B (Wan2GP)',
         description: 'Image — Flux 1 Chroma Radiance (Oct 2025), uncensored base model with a neutral, flexible style.',
         type: 'image',

@@ -6,7 +6,7 @@
 //   both:   'available' | 'missing' | 'installed'; anything else means the model is unknown
 // Weights that are not on disk yet are still usable — Wan2GP downloads them on
 // first use — so that case is ready with a note, not unavailable.
-const { rateFit } = require('./wan2gpFit');
+const { rateFit, shouldDemoteLegacy } = require('./wan2gpFit');
 
 function withWan2gpAvailability(model, engine) {
     if (!engine?.ok) {
@@ -23,9 +23,10 @@ function withWan2gpAvailability(model, engine) {
     if (rated?.fit === 'unfit') {
         return { ...model, ready: false, fit: 'unfit', unavailableReason: rated.reason, downloadGB: rated.downloadGB };
     }
-    const fitInfo = rated && rated.fit !== 'unknown'
-        ? { fit: rated.fit, fitReason: rated.reason, downloadGB: rated.downloadGB }
-        : {};
+    const fitInfo = {
+        ...(rated && rated.fit !== 'unknown' ? { fit: rated.fit, fitReason: rated.reason, downloadGB: rated.downloadGB } : {}),
+        ...(model.legacy ? { legacyDemoted: shouldDemoteLegacy(engine.hardware) } : {}),
+    };
 
     if (status === 'installed' || status === 'available') {
         // 'available' = weight files found in ckpts/; 'installed' = defined, files unknown.

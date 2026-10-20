@@ -28,6 +28,11 @@ const REQUIREMENTS = {
     ltx2_22B_distilled:    { minVramGB: 16, comfortVramGB: 24, minRamGB: 48, downloadGB: 35 },
 };
 
+// Older model families (SD 1.5 / SDXL, Chroma) are only worth listing first on small GPUs. When the
+// GPU has enough memory for the newer models they stay available, but move to the end of the list.
+const LEGACY_DEMOTE_FROM_VRAM_GB = 12;
+const shouldDemoteLegacy = (hardware) => !!hardware && typeof hardware.vramGB === 'number' && hardware.vramGB >= LEGACY_DEMOTE_FROM_VRAM_GB;
+
 // Free space we want to keep after the download finishes.
 const DISK_HEADROOM_GB = 10;
 
@@ -81,4 +86,4 @@ function rateAgainst(req, hardware, needsDownload) {
     return { fit: 'recommended', reason: '', downloadGB };
 }
 
-module.exports = { REQUIREMENTS, FIT_ORDER, rateFit, rateAgainst, sdRequirements };
+module.exports = { REQUIREMENTS, FIT_ORDER, rateFit, rateAgainst, sdRequirements, shouldDemoteLegacy, LEGACY_DEMOTE_FROM_VRAM_GB };

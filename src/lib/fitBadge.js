@@ -2,13 +2,21 @@
 import { t } from './i18n.js';
 import { localAI } from './localInferenceClient.js';
 
-const FIT_ORDER = { recommended: 0, unknown: 1, heavy: 2, unfit: 3 };
+const FIT_ORDER = { recommended: 0, unknown: 1, heavy: 2, legacy: 3, unfit: 4 };
+
+/** Position of a model in the list: models that do not fit last, demoted legacy ones just before them. */
+export function fitRank(info) {
+    if (!info) return FIT_ORDER.unknown;
+    if (info.fit === 'unfit') return FIT_ORDER.unfit;
+    if (info.legacy && info.legacyDemoted) return FIT_ORDER.legacy;
+    return FIT_ORDER[info.fit] ?? FIT_ORDER.unknown;
+}
 const escapeAttr = (s) => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /** Stable sort: recommended first, then unknown, heavy, and models that do not fit last. */
 export function sortByFit(models, infoOf = (m) => m) {
     return models
-        .map((m, i) => ({ m, i, rank: FIT_ORDER[infoOf(m)?.fit] ?? FIT_ORDER.unknown }))
+        .map((m, i) => ({ m, i, rank: fitRank(infoOf(m)) }))
         .sort((a, b) => a.rank - b.rank || a.i - b.i)
         .map(x => x.m);
 }
@@ -20,14 +28,17 @@ export function downloadedBadgeHtml(info) {
 }
 
 export function fitBadgeHtml(info) {
-    if (!info?.fit || info.fit === 'unknown') return '';
+    const legacy = info?.legacy
+        ? `<span title="${escapeAttr(t('fit.legacyHelp'))}" class="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-white/10 text-white/50">${t('fit.legacy')}</span>`
+        : '';
+    if (!info?.fit || info.fit === 'unknown') return legacy;
     const styles = {
         recommended: ['bg-green-500/15 text-green-400', t('fit.recommended')],
         heavy: ['bg-yellow-500/15 text-yellow-400', t('fit.heavy')],
         unfit: ['bg-red-500/15 text-red-400', t('fit.unfit')],
     };
     const [cls, label] = styles[info.fit];
-    return `<span title="${escapeAttr(info.fitReason || info.unavailableReason)}" class="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide ${cls}">${label}</span>`;
+    return `<span title="${escapeAttr(info.fitReason || info.unavailableReason)}" class="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide ${cls}">${label}</span>${legacy}`;
 }
 
 /** id → { fit, fitReason, unavailableReason, downloadGB, needsDownload, ready } for every local model. */
