@@ -467,6 +467,19 @@ Every image you upload is saved locally (URL + thumbnail) so you never upload th
 - [Node.js](https://nodejs.org/) (v18+)
 - A [Muapi.ai access key](https://muapi.ai/access-keys?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai). Copy the generated key value into the app; do not enter the key name or label.
 
+### Windows quick setup (this fork)
+
+Needs [Git](https://git-scm.com/) and [Node.js 18+](https://nodejs.org/). In PowerShell:
+
+```powershell
+git clone --recurse-submodules <this repo URL>
+cd open-generative-ai
+powershell -ExecutionPolicy Bypass -File setup.ps1            # app only
+powershell -ExecutionPolicy Bypass -File setup.ps1 -Wan2GP    # + local video models (NVIDIA GPU, Python 3.11)
+```
+
+Optional: `-ModelsDir D:\AI\local-ai` stores engine and models on another drive (it can also be changed later from Settings > Local Models > Change folder). Then start the app with `start.bat`.
+
 ### Setup
 
 > **Most users want the desktop app, not this dev path.** If you just want to run Open Generative AI on your machine, [download a prebuilt installer](#-download-desktop-app) instead — no Node.js required. The instructions below are for contributors building from source.
