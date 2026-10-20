@@ -160,9 +160,17 @@ function inputPath(file) {
 // ─── Generation ───────────────────────────────────────────────────────────────
 let active = null; // { cancel: () => void, cancelled: boolean }
 
+const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' };
+
 function mediaResult(filePath, seed) {
-    const mediaType = VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase()) ? 'video' : 'image';
-    return { url: pathToFileURL(filePath).href, mediaType, seed, path: filePath };
+    const ext = path.extname(filePath).toLowerCase();
+    const mediaType = VIDEO_EXTENSIONS.has(ext) ? 'video' : 'image';
+    // Images come back inline (like sd.cpp results) so the UI can copy/download them: fetch() cannot
+    // read file:// URLs. Videos are too big for that and play fine from their file URL.
+    const url = mediaType === 'image' && IMAGE_MIME[ext]
+        ? `data:${IMAGE_MIME[ext]};base64,${fs.readFileSync(filePath).toString('base64')}`
+        : pathToFileURL(filePath).href;
+    return { url, mediaType, seed, path: filePath };
 }
 
 async function generate(params, mainWindow) {

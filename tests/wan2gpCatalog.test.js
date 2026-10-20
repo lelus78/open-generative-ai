@@ -112,3 +112,11 @@ test('lip sync gets a default prompt when none is given (Wan2GP rejects empty pr
     assert.ok(settings.prompt.length > 0);
     assert.equal(buildWan2gpSettings(getModelById('wan2gp:wan22-i2v'), {}, { imageStart: '/in/a.png' }).prompt, '');
 });
+
+test('aspect ratios outside the model table get a derived resolution', () => {
+    const qwen = getModelById('wan2gp:qwen-image');
+    assert.equal(buildWan2gpSettings(qwen, { aspect_ratio: '16:9' }).resolution, '1280x720'); // from the table
+    assert.equal(buildWan2gpSettings(qwen, { aspect_ratio: '21:9' }).resolution, '1792x1024');
+    assert.equal(buildWan2gpSettings(qwen, { aspect_ratio: '4:5' }).resolution, '1024x1280');
+    assert.equal(buildWan2gpSettings(qwen, { aspect_ratio: 'nonsense' }).resolution, '1024x1024');
+});

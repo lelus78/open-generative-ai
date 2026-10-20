@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory } from '../lib/studioHelpers.js';
 
 export function LipSyncStudio() {
     const container = document.createElement('div');
@@ -609,7 +609,7 @@ export function LipSyncStudio() {
 
     const addToHistory = (entry) => {
         generationHistory.unshift(entry);
-        localStorage.setItem('lipsync_history', JSON.stringify(generationHistory.slice(0, 30)));
+        saveHistory('lipsync_history', generationHistory, 30);
         historySidebar.classList.remove('translate-x-full', 'opacity-0');
         historySidebar.classList.add('translate-x-0', 'opacity-100');
         renderHistory();

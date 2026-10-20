@@ -3,8 +3,11 @@ import { muapi } from '../lib/muapi.js';
 import { CameraControls } from './CameraControls.js';
 import { buildNanoBananaPrompt, CAMERA_MAP, LENS_MAP, FOCAL_PERSPECTIVE, APERTURE_EFFECT } from '../lib/promptUtils.js';
 import { AuthModal } from './AuthModal.js';
-import { t } from '../lib/i18n.js';
-import { attachPromptHistory, attachImageCopy } from '../lib/studioHelpers.js';
+import { t, tf } from '../lib/i18n.js';
+import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
+import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
+import { sortByFit } from '../lib/fitBadge.js';
+import { attachPromptHistory, attachImageCopy, saveHistory } from '../lib/studioHelpers.js';
 
 export function CinemaStudio() {
     const container = document.createElement('div');
@@ -119,6 +122,32 @@ export function CinemaStudio() {
     inputRow.appendChild(textarea);
     const promptHistory = attachPromptHistory(textarea, 'cinema_prompt_history');
 
+    // ── Local (desktop app) image models ──
+    // The shot is composed into one text prompt, so any local text-to-image model can render it.
+    let useLocalModel = false;
+    let localInfo = new Map(); // id → model info (state / fit / readiness) from the desktop app
+    let selectedLocalModel = null;
+    try { selectedLocalModel = localStorage.getItem('cinema_local_model'); } catch { /* storage unavailable */ }
+    const localImageModels = isLocalAIAvailable() ? LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video') : [];
+
+    // sd.cpp models must already be on disk (they download from Settings); Wan2GP ones may download on first use.
+    const isLocalUsable = (m) => {
+        const info = localInfo.get(m.id);
+        if (!info) return false;
+        if (info.fit === 'unfit') return false;
+        if (m.provider === 'wan2gp') return info.ready !== false;
+        const aux = info.auxiliaryStatus || {};
+        return info.state === 'downloaded' && (!info.requiresAuxiliary || (aux.llm === 'downloaded' && aux.vae === 'downloaded'));
+    };
+    const usableLocalModels = () => sortByFit(localImageModels.filter(isLocalUsable), m => localInfo.get(m.id));
+    const refreshLocalInfo = async () => {
+        try {
+            localInfo = new Map((await localAI.listModels()).map(m => [m.id, m]));
+        } catch (err) {
+            console.warn('[CinemaStudio] Could not read local models:', err);
+        }
+    };
+
     leftColumn.appendChild(inputRow);
 
     // 2. Settings Toolbar (Bottom Left)
@@ -193,6 +222,72 @@ export function CinemaStudio() {
     cameraBuilderBtn.setAttribute('data-tooltip', t('cinema.builderTooltip'));
     cameraBuilderBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="3"/></svg> Builder`;
     settingsToolbar.appendChild(cameraBuilderBtn);
+
+    if (isLocalAIAvailable()) {
+        const toolbarBtnClass = 'flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold transition-colors rounded-lg border';
+        const localToggleBtn = document.createElement('button');
+        const localModelBtn = document.createElement('button');
+        localModelBtn.className = `${toolbarBtnClass} text-white/70 hover:text-white bg-white/5 hover:bg-white/10 border-white/5`;
+        localModelBtn.style.display = 'none';
+
+        const updateLocalModelBtn = () => {
+            const model = localImageModels.find(m => m.id === selectedLocalModel);
+            localModelBtn.textContent = model ? model.name : t('cinema.noLocalModel');
+        };
+        const updateLocalToggle = () => {
+            localToggleBtn.className = `${toolbarBtnClass} ${useLocalModel ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-white/5 border-white/5 text-white/50 hover:text-white hover:bg-white/10'}`;
+            localToggleBtn.textContent = useLocalModel ? t('image.local') : t('image.api');
+            resBtn.style.display = useLocalModel ? 'none' : '';      // 1K/2K/4K is a cloud option
+            localModelBtn.style.display = useLocalModel ? '' : 'none';
+        };
+        const pickDefaultLocalModel = () => {
+            const usable = usableLocalModels();
+            if (!usable.some(m => m.id === selectedLocalModel)) selectedLocalModel = usable[0]?.id || null;
+            updateLocalModelBtn();
+        };
+
+        localToggleBtn.onclick = async (e) => {
+            e.stopPropagation();
+            useLocalModel = !useLocalModel;
+            try { localStorage.setItem('cinema_use_local', useLocalModel ? '1' : '0'); } catch { /* storage unavailable */ }
+            updateLocalToggle();
+            if (useLocalModel) {
+                await refreshLocalInfo();
+                pickDefaultLocalModel();
+            }
+        };
+        localModelBtn.onclick = async (e) => {
+            e.stopPropagation();
+            await refreshLocalInfo();
+            const usable = usableLocalModels();
+            if (!usable.length) { alert(t('cinema.noLocalModelHelp')); return; }
+            const label = (m) => {
+                const info = localInfo.get(m.id);
+                return `${m.name}${info?.fit === 'heavy' ? ' · heavy' : ''}${info?.needsDownload ? ` · ↓ ~${info.downloadGB ?? '?'} GB` : ''}`;
+            };
+            const byLabel = new Map(usable.map(m => [label(m), m]));
+            const current = usable.find(m => m.id === selectedLocalModel);
+            createDropdown([...byLabel.keys()], current ? label(current) : '', (picked) => {
+                selectedLocalModel = byLabel.get(picked).id;
+                try { localStorage.setItem('cinema_local_model', selectedLocalModel); } catch { /* storage unavailable */ }
+                updateLocalModelBtn();
+            }, localModelBtn);
+        };
+
+        updateLocalToggle();
+        updateLocalModelBtn();
+        settingsToolbar.insertBefore(localModelBtn, settingsToolbar.firstChild);
+        settingsToolbar.insertBefore(localToggleBtn, settingsToolbar.firstChild);
+
+        // Reopen in the mode used last time (needs the container mounted, so wait for it).
+        const restoreLastMode = (tries = 40) => {
+            if (!container.isConnected) { if (tries > 0) setTimeout(() => restoreLastMode(tries - 1), 50); return; }
+            let wasLocal = false;
+            try { wasLocal = localStorage.getItem('cinema_use_local') === '1'; } catch { /* storage unavailable */ }
+            if (wasLocal && !useLocalModel) localToggleBtn.onclick({ stopPropagation() {} });
+        };
+        setTimeout(restoreLastMode, 0);
+    }
 
     leftColumn.appendChild(settingsToolbar);
     promptBar.appendChild(leftColumn);
@@ -438,7 +533,7 @@ export function CinemaStudio() {
 
     const addToHistory = (entry) => {
         generationHistory.unshift(entry);
-        localStorage.setItem('cinema_history', JSON.stringify(generationHistory.slice(0, 50)));
+        saveHistory('cinema_history', generationHistory, 50);
         renderHistory();
     };
 
@@ -550,10 +645,22 @@ export function CinemaStudio() {
         if (!basePrompt) return;
         promptHistory.remember(basePrompt);
 
-        const apiKey = localStorage.getItem('muapi_key');
-        if (!apiKey) {
-            AuthModal(() => generateBtn.click());
-            return;
+        if (!useLocalModel) {
+            const apiKey = localStorage.getItem('muapi_key');
+            if (!apiKey) {
+                AuthModal(() => generateBtn.click());
+                return;
+            }
+        }
+
+        // Local model: make sure one is ready, and never start a multi-GB download without asking.
+        if (useLocalModel) {
+            await refreshLocalInfo();
+            if (!usableLocalModels().some(m => m.id === selectedLocalModel)) selectedLocalModel = usableLocalModels()[0]?.id || null;
+            const model = localImageModels.find(m => m.id === selectedLocalModel);
+            if (!model) { alert(t('cinema.noLocalModelHelp')); return; }
+            const info = localInfo.get(model.id);
+            if (info?.needsDownload && !confirm(tf('fit.confirmDownload', model.name, info.downloadGB ?? '?'))) return;
         }
 
         generateBtn.disabled = true;
@@ -568,8 +675,20 @@ export function CinemaStudio() {
             currentSettings.aperture
         );
 
+        let unsubscribeProgress = null;
         try {
-            const res = await muapi.generateImage({
+            if (useLocalModel) {
+                unsubscribeProgress = localAI.onProgress((event) => {
+                    const label = event.totalSteps ? `${event.step}/${event.totalSteps}` : (event.message || t('cinema.shooting'));
+                    generateBtn.innerHTML = label;
+                });
+            }
+            const res = useLocalModel ? await localAI.generate({
+                model: selectedLocalModel,
+                prompt: finalPrompt,
+                negative_prompt: 'blurry, low quality, distortion, bad composition',
+                aspect_ratio: currentSettings.aspect_ratio,
+            }) : await muapi.generateImage({
                 model: 'nano-banana-pro',
                 prompt: finalPrompt,
                 aspect_ratio: currentSettings.aspect_ratio,
@@ -598,6 +717,7 @@ export function CinemaStudio() {
             console.error(e);
             alert(t('cinema.generationFailed') + e.message);
         } finally {
+            unsubscribeProgress?.();
             generateBtn.disabled = false;
             generateBtn.innerHTML = t('cinema.generateBtn');
         }

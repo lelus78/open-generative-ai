@@ -128,3 +128,18 @@ export function attachMediaDrop({ container, textarea, image, video, audio }) {
         if (dispatch(e.dataTransfer)) e.preventDefault();
     });
 }
+
+/**
+ * Persist a studio's generation history without ever throwing. Results of local models are
+ * inline `data:` images of several MB each, which would blow the localStorage quota after a few
+ * generations, so those stay in memory for the session and only regular URLs are saved.
+ */
+export function saveHistory(storageKey, entries, max) {
+    const persistable = entries.filter(e => !String(e?.url || '').startsWith('data:')).slice(0, max);
+    for (const list of [persistable, persistable.slice(0, 10), []]) {
+        try {
+            localStorage.setItem(storageKey, JSON.stringify(list));
+            return;
+        } catch { /* quota exceeded: retry with a shorter list */ }
+    }
+}

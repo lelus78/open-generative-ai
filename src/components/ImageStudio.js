@@ -11,7 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory } from '../lib/studioHelpers.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
 import { appendGenerationRefundNotice } from '../../packages/studio/src/utils/generationLifecycle.js';
@@ -1058,7 +1058,7 @@ export function ImageStudio() {
         generationHistory.unshift(entry);
 
         // Save to localStorage
-        localStorage.setItem('muapi_history', JSON.stringify(generationHistory.slice(0, 50)));
+        saveHistory('muapi_history', generationHistory, 50);
 
         // Show sidebar
         historySidebar.classList.remove('translate-x-full', 'opacity-0');

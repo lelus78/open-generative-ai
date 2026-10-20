@@ -220,6 +220,8 @@ const translations = {
         'cinema.useSetup': 'Use This Setup',
         'cinema.selectSettings': 'Select camera settings to see preview...',
         'cinema.generationFailed': 'Generation Failed: ',
+        'cinema.noLocalModel': 'No local model ready',
+        'cinema.noLocalModelHelp': 'No local image model is ready yet. Download one in Settings → Local Models (for example Z-Image Turbo), then try again.',
 
         // Agent Studio
         'agents.title': 'Agent Studio',
@@ -461,6 +463,8 @@ const translations = {
         'cinema.useSetup': '使用此设置',
         'cinema.selectSettings': '选择摄像机设置以查看预览...',
         'cinema.generationFailed': '生成失败：',
+        'cinema.noLocalModel': '没有可用的本地模型',
+        'cinema.noLocalModelHelp': '还没有可用的本地图像模型。请先在“设置 → 本地模型”中下载一个（例如 Z-Image Turbo），然后重试。',
 
         // Agent Studio
         'agents.title': '智能体工作室',

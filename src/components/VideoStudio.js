@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory } from '../lib/studioHelpers.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -1067,7 +1067,7 @@ export function VideoStudio() {
     // --- Helper: Add to history ---
     const addToHistory = (entry) => {
         generationHistory.unshift(entry);
-        localStorage.setItem('video_history', JSON.stringify(generationHistory.slice(0, 30)));
+        saveHistory('video_history', generationHistory, 30);
         historySidebar.classList.remove('translate-x-full', 'opacity-0');
         historySidebar.classList.add('translate-x-0', 'opacity-100');
         renderHistory();

@@ -187,6 +187,24 @@ function getModelById(id) {
     return WAN2GP_CATALOG.find(m => m.id === id) || null;
 }
 
+// The model's table covers its own aspect ratios; for any other "w:h" (e.g. Cinema's 21:9 or 4:5)
+// keep the short side of its square size and cap the long side, in multiples of 16.
+function resolutionFor(model, aspectRatio) {
+    const known = model.resolutions?.[aspectRatio];
+    if (known) return known;
+    const fallback = model.resolutions?.[model.aspectRatios?.[0]];
+    const ratio = /^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/.exec(String(aspectRatio || '').trim());
+    const square = model.resolutions?.['1:1'] || fallback;
+    if (!ratio || !square) return fallback;
+    const rw = Number(ratio[1]);
+    const rh = Number(ratio[2]);
+    if (!(rw > 0 && rh > 0)) return fallback;
+    const base = Math.min(...square.split('x').map(Number));
+    const snap = (v) => Math.max(256, Math.round(v / 16) * 16);
+    const long = snap(Math.min(base * Math.max(rw, rh) / Math.min(rw, rh), base * 1.75));
+    return rw >= rh ? `${long}x${base}` : `${base}x${long}`;
+}
+
 // Wan2GP trims audio-driven clips to the audio length; this only caps very long recordings (~40 s at 25 fps).
 const MAX_AUDIO_DRIVEN_FRAMES = 1000;
 const DEFAULT_LIPSYNC_PROMPT = 'A person speaking naturally to the camera, with expressive lip sync.';
@@ -217,7 +235,7 @@ function buildWan2gpSettings(model, params = {}, { imageStart, audioStart } = {}
     };
     if (params.negative_prompt) settings.negative_prompt = params.negative_prompt;
 
-    const resolution = model.resolutions?.[params.aspect_ratio] || model.resolutions?.[model.aspectRatios?.[0]];
+    const resolution = resolutionFor(model, params.aspect_ratio);
     if (resolution) settings.resolution = resolution;
 
     const steps = toInt(params.steps);
