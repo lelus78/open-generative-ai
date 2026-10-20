@@ -449,6 +449,10 @@ export function LocalModelManager() {
             </div>
         </div>
         <div id="local-model-hw" class="text-[10px] text-muted"></div>
+        <label class="flex items-start gap-2 text-[11px] text-white/80 cursor-pointer">
+            <input id="local-translate" type="checkbox" class="mt-0.5 accent-cyan-400">
+            <span>${t('localModels.translatePrompts')}<span class="block text-[10px] text-muted">${t('localModels.translatePromptsHelp')}</span></span>
+        </label>
         <div class="flex items-center justify-between gap-3">
             <span id="local-outputs-info" class="text-[10px] text-muted"></span>
             <button id="local-outputs-clear" class="shrink-0 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 transition-colors">${t('localModels.deleteGenerated')}</button>
@@ -460,6 +464,9 @@ export function LocalModelManager() {
     const listEl = modelsSection.querySelector('#local-model-list');
     const storageEl = modelsSection.querySelector('#local-model-storage');
     const hwEl = modelsSection.querySelector('#local-model-hw');
+    const translateEl = modelsSection.querySelector('#local-translate');
+    localAI.getLocalSettings().then(s => { translateEl.checked = !!s.translatePrompts; });
+    translateEl.onchange = () => { localAI.setLocalSettings({ translatePrompts: translateEl.checked }); };
     const outputsInfoEl = modelsSection.querySelector('#local-outputs-info');
     const outputsClearBtn = modelsSection.querySelector('#local-outputs-clear');
     const fmtBytes = (b) => b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(b / 1024 ** 2))} MB`;

@@ -688,7 +688,7 @@ export function CinemaStudio() {
         // Compile Prompt
         // Cloud models read camera terms as photographic style; local ones would draw the camera itself.
         const compilePrompt = useLocalModel ? buildLocalCinemaPrompt : buildNanoBananaPrompt;
-        const finalPrompt = compilePrompt(
+        let finalPrompt = compilePrompt(
             basePrompt,
             currentSettings.camera,
             currentSettings.lens,
@@ -703,6 +703,13 @@ export function CinemaStudio() {
                     const label = event.totalSteps ? `${event.step}/${event.totalSteps}` : (event.message || t('cinema.shooting'));
                     generateBtn.innerHTML = label;
                 });
+            }
+            // Translate only the user's subject, then compose the look around the English text.
+            let translatedPrompt = null;
+            if (useLocalModel) {
+                const translation = await localAI.translatePrompt(basePrompt);
+                translatedPrompt = translation.translatedPrompt;
+                finalPrompt = buildLocalCinemaPrompt(translation.text, currentSettings.camera, currentSettings.lens, currentSettings.focal, currentSettings.aperture);
             }
             const res = useLocalModel ? await localAI.generate({
                 model: selectedLocalModel,
@@ -722,6 +729,7 @@ export function CinemaStudio() {
                 addToHistory({
                     url: res.url,
                     path: res.path, // file on disk (Wan2GP results), so Delete can remove it
+                    translatedPrompt: translatedPrompt || res.translatedPrompt,
                     model: useLocalModel ? `local:${selectedLocalModel}` : 'nano-banana-pro',
                     timestamp: Date.now(),
                     settings: {

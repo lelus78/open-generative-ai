@@ -5,6 +5,7 @@ const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
 const { getHardwareProfile } = require('./hardwareProfile');
+const { createPromptTranslator } = require('./promptTranslator');
 const {
     getBundledBinaryResourceDir,
     pickBinaryAssetForPlatform,
@@ -540,6 +541,24 @@ function arToDimensions(ar, modelType) {
         : [base, snap(Math.min(base * rh / rw, maxSide))];
 }
 
+// Non-English prompts are translated first (see promptTranslator.js). Shared with the Wan2GP provider.
+let translator = null;
+function getTranslator() {
+    if (!translator) {
+        const { ZIMAGE_AUXILIARY } = require('./modelCatalog');
+        translator = createPromptTranslator({
+            getPaths: () => ({ dataDir: DATA_DIR, modelsDir: MODELS_DIR }),
+            downloadFile,
+            llmFilename: ZIMAGE_AUXILIARY.llm.filename,
+            settingsFile: path.join(app.getPath('userData'), 'local-ai-settings.json'),
+        });
+    }
+    return translator;
+}
+function translatePrompts(params, send) {
+    return getTranslator().translateParams(params, (message) => send({ status: 'starting', progress: 0, message }));
+}
+
 async function generate(params, mainWindow) {
     const { LOCAL_MODEL_CATALOG, ZIMAGE_AUXILIARY } = require('./modelCatalog');
     const send = (data) => mainWindow?.webContents.send('local-ai:progress', data);
@@ -560,6 +579,9 @@ async function generate(params, mainWindow) {
         if (!fs.existsSync(llmPath)) throw new Error('Text encoder (Qwen3-4B) not downloaded. Go to Settings > Local Models and download all required files for Z-Image.');
         if (!fs.existsSync(vaePath)) throw new Error('VAE (ae.safetensors) not downloaded. Go to Settings > Local Models and download all required files for Z-Image.');
     }
+
+    const translated = await translatePrompts(params, send);
+    params = translated.params;
 
     const [width, height] = arToDimensions(params.aspect_ratio || '1:1', model.type);
     const seed = params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 2147483647);
@@ -681,7 +703,7 @@ async function generate(params, mainWindow) {
                 const dataUrl = `data:image/png;base64,${imgBuffer.toString('base64')}`;
                 fs.unlinkSync(outPath);
                 send({ step: steps, totalSteps: steps, status: 'done', progress: 1 });
-                resolve({ url: dataUrl, seed });
+                resolve({ url: dataUrl, seed, translatedPrompt: translated.translatedPrompt });
             } catch (err) {
                 reject(err);
             }
@@ -712,6 +734,12 @@ function getMainWindow() {
 function register() {
     ensureLocalAiPaths();
     ipcMain.handle('local-ai:binary-status', () => getBinaryStatus());
+    ipcMain.handle('local-ai:translate', async (_, text) => {
+        const { params, translatedPrompt } = await translatePrompts({ prompt: String(text || '') }, (d) => getMainWindow()?.webContents.send('local-ai:progress', d));
+        return { text: params.prompt, translatedPrompt };
+    });
+    ipcMain.handle('local-ai:get-settings', () => getTranslator().getSettings());
+    ipcMain.handle('local-ai:set-settings', (_, patch) => { getTranslator().setSettings(patch || {}); return getTranslator().getSettings(); });
     ipcMain.handle('local-ai:pick-storage', () => pickStorageFolder(getMainWindow()));
     ipcMain.handle('local-ai:download-binary', () => downloadBinary(getMainWindow()));
     ipcMain.handle('local-ai:list-models', () => listModels());
@@ -725,5 +753,6 @@ function register() {
 module.exports = {
     register,
     downloadFile,
+    translatePrompts,
     getDataDir: () => DATA_DIR,
 };

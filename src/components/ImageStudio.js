@@ -1278,6 +1278,7 @@ export function ImageStudio() {
                     aspect_ratio: selectedAr,
                     seed: res.seed,
                     path: res.path, // file on disk (Wan2GP results), so Delete can remove it
+                    translatedPrompt: res.translatedPrompt,
                     timestamp: new Date().toISOString()
                 });
                 showImageInCanvas(res.url);

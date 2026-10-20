@@ -193,6 +193,10 @@ async function generate(params, mainWindow) {
     send({ status: 'starting', progress: 0 });
 
     try {
+        // Non-English prompts are translated first (English works much better with these models).
+        const translated = await require('./localInference').translatePrompts(params, send);
+        params = translated.params;
+
         if (mode === 'local') {
             const install = local.resolveInstall(cfg);
             const installCheck = local.checkInstall(install);
@@ -204,7 +208,7 @@ async function generate(params, mainWindow) {
                 throw run.cancelled ? new Error('Generation cancelled') : err;
             });
             send({ status: 'done', progress: 1 });
-            return mediaResult(mediaPath, settings.seed);
+            return { ...mediaResult(mediaPath, settings.seed), translatedPrompt: translated.translatedPrompt };
         }
 
         if (model.needsAudio) throw new Error(`${model.name} needs a local Wan2GP folder: audio files cannot be sent to a remote server yet.`);

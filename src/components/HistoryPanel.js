@@ -142,7 +142,7 @@ export function createHistoryPanel(options) {
         card.innerHTML = `
             <div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-white/5">${mediaHtml(entry)}</div>
             <div class="min-w-0 flex-1 flex flex-col justify-center gap-1.5">
-                <p class="text-[11px] leading-snug ${prompt ? 'text-white/90' : 'text-muted italic'}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(prompt || t('history.noPrompt'))}</p>
+                <p title="${escapeHtml(entry.translatedPrompt ? `English: ${entry.translatedPrompt}` : '')}" class="text-[11px] leading-snug ${prompt ? 'text-white/90' : 'text-muted italic'}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(prompt || t('history.noPrompt'))}</p>
                 <div class="flex items-center gap-1.5 flex-wrap text-[9px] text-muted">
                     <span class="px-1.5 py-0.5 rounded-md bg-white/5 text-white/70 font-bold truncate max-w-[7.5rem]">${escapeHtml(getModelLabel(entry))}</span>
                     ${isLocal(entry) ? `<span class="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-black uppercase">${t('history.local')}</span>` : ''}

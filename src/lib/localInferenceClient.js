@@ -14,6 +14,19 @@ class LocalInferenceClient {
         if (!isLocalAIAvailable()) return { exists: false };
         return window.localAI.getBinaryStatus();
     }
+    // Translates a prompt to English when it is not (resolves to { text, translatedPrompt }).
+    async translatePrompt(text) {
+        if (!isLocalAIAvailable()) return { text, translatedPrompt: null };
+        return window.localAI.translate(text);
+    }
+    async getLocalSettings() {
+        if (!isLocalAIAvailable()) return { translatePrompts: false };
+        return window.localAI.getSettings();
+    }
+    async setLocalSettings(patch) {
+        if (!isLocalAIAvailable()) return { translatePrompts: false };
+        return window.localAI.setSettings(patch);
+    }
     async getHardware() {
         if (!isLocalAIAvailable()) return null;
         return window.localAI.getHardware();
