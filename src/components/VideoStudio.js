@@ -6,6 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput } from '../lib/studioHelpers.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -374,6 +375,7 @@ export function VideoStudio() {
     };
 
     topRow.appendChild(textarea);
+    const promptHistory = attachPromptHistory(textarea, 'video_prompt_history');
     bar.appendChild(topRow);
 
     // Extend mode banner (shown when extend model is active, not editable by user)
@@ -1195,9 +1197,19 @@ export function VideoStudio() {
         promptWrapper.classList.remove('hidden', 'opacity-40');
     };
 
+    // Paste (Ctrl+V) or drop files: images become the start frame, videos open the video tools.
+    attachMediaDrop({
+        container,
+        textarea,
+        image: (files) => picker.addFiles(files),
+        video: (files) => { if (!useLocalModel) feedFileInput(videoFileInput, files); },
+    });
+
     newPromptBtn.onclick = () => {
+        // Keep the prompt and the chosen model; only fall back to the default text-to-video
+        // model when the current one belongs to a mode that is being left (image/video tools, extend).
+        const needsModelReset = imageMode || v2vMode || !t2vList().some(m => m.id === selectedModel);
         resetToPromptBar();
-        textarea.value = '';
         picker.reset();
         uploadedImageUrl = null;
         imageMode = false;
@@ -1205,10 +1217,12 @@ export function VideoStudio() {
         v2vMode = false;
         showVideoIcon();
         hideLocalPanel();
-        selectedModel = t2vList()[0].id;
-        selectedModelName = t2vList()[0].name;
-        document.getElementById('v-model-btn-label').textContent = selectedModelName;
-        updateControlsForModel(selectedModel);
+        if (needsModelReset) {
+            selectedModel = t2vList()[0].id;
+            selectedModelName = t2vList()[0].name;
+            document.getElementById('v-model-btn-label').textContent = selectedModelName;
+            updateControlsForModel(selectedModel);
+        }
         textarea.placeholder = 'Describe the video you want to create';
         textarea.disabled = false;
         textarea.focus();
@@ -1234,6 +1248,7 @@ export function VideoStudio() {
     // ==========================================
     generateBtn.onclick = async () => {
         const prompt = textarea.value.trim();
+        promptHistory.remember(prompt);
         const model = getCurrentModel();
         const isExtendMode = model?.requiresRequestId;
 

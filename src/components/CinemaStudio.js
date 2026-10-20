@@ -4,6 +4,7 @@ import { CameraControls } from './CameraControls.js';
 import { buildNanoBananaPrompt, CAMERA_MAP, LENS_MAP, FOCAL_PERSPECTIVE, APERTURE_EFFECT } from '../lib/promptUtils.js';
 import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
+import { attachPromptHistory, attachImageCopy } from '../lib/studioHelpers.js';
 
 export function CinemaStudio() {
     const container = document.createElement('div');
@@ -116,6 +117,7 @@ export function CinemaStudio() {
         this.style.height = (this.scrollHeight) + 'px';
     };
     inputRow.appendChild(textarea);
+    const promptHistory = attachPromptHistory(textarea, 'cinema_prompt_history');
 
     leftColumn.appendChild(inputRow);
 
@@ -404,10 +406,12 @@ export function CinemaStudio() {
 
     const regenerateBtn = createActionBtn(t('cinema.regenerate'));
     const downloadBtn = createActionBtn(t('cinema.download'), true);
+    const copyBtn = createActionBtn(t('common.copy'));
     const newPromptBtn = createActionBtn(t('cinema.newShot'));
 
     canvasControls.appendChild(regenerateBtn);
     canvasControls.appendChild(downloadBtn);
+    canvasControls.appendChild(copyBtn);
     canvasControls.appendChild(newPromptBtn);
     canvas.appendChild(canvasControls);
 
@@ -490,8 +494,7 @@ export function CinemaStudio() {
         heroSection.classList.remove('opacity-0', 'pointer-events-none', 'scale-95');
         promptBarWrapper.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-20');
 
-        // Clear prompt for new shot?
-        textarea.value = '';
+        // The prompt stays so it can be tweaked and shot again (Regenerate relies on it too).
         textarea.focus();
     };
 
@@ -505,6 +508,14 @@ export function CinemaStudio() {
     } catch (e) { }
 
     // Actions
+    attachImageCopy({
+        button: copyBtn,
+        getSrc: () => resultImg.src,
+        isVisible: () => canvas.classList.contains('opacity-100'),
+        container,
+        label: t('common.copy'),
+        doneLabel: t('common.copied'),
+    });
     newPromptBtn.onclick = resetToPrompt;
 
     regenerateBtn.onclick = () => {
@@ -537,6 +548,7 @@ export function CinemaStudio() {
     generateBtn.onclick = async () => {
         const basePrompt = textarea.value.trim();
         if (!basePrompt) return;
+        promptHistory.remember(basePrompt);
 
         const apiKey = localStorage.getItem('muapi_key');
         if (!apiKey) {

@@ -4,6 +4,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput } from '../lib/studioHelpers.js';
 
 export function LipSyncStudio() {
     const container = document.createElement('div');
@@ -252,6 +253,8 @@ export function LipSyncStudio() {
     textarea.placeholder = t('lipsync.promptPlaceholder');
     textarea.className = 'flex-1 bg-transparent text-white placeholder-muted/50 text-sm resize-none outline-none min-h-[56px] leading-relaxed pt-1';
     textarea.rows = 2;
+
+    const promptHistory = attachPromptHistory(textarea, 'lipsync_prompt_history');
 
     uploadsRow.appendChild(imagePicker.trigger);
     uploadsRow.appendChild(videoPickerBtn);
@@ -625,6 +628,15 @@ export function LipSyncStudio() {
 
     regenerateBtn.onclick = () => generateBtn.click();
 
+    // Paste (Ctrl+V) or drop files onto the studio: they go to the slot matching the current mode.
+    attachMediaDrop({
+        container,
+        textarea,
+        image: (files) => { if (inputMode === 'image') imagePicker.addFiles(files); },
+        video: (files) => { if (inputMode === 'video') feedFileInput(videoFileInput, files); },
+        audio: (files) => feedFileInput(audioFileInput, files),
+    });
+
     newBtn.onclick = () => {
         canvas.classList.add('opacity-0', 'pointer-events-none', 'translate-y-10', 'scale-95');
         canvas.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
@@ -632,7 +644,7 @@ export function LipSyncStudio() {
         canvasControls.classList.remove('opacity-100');
         hero.classList.remove('hidden', 'opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
         promptWrapper.classList.remove('hidden', 'opacity-40');
-        textarea.value = '';
+        // The prompt stays; only the uploaded media is cleared.
         // Reset uploads
         imagePicker.reset();
         uploadedImageUrl = null;
@@ -653,6 +665,7 @@ export function LipSyncStudio() {
     generateBtn.onclick = async () => {
         const model = getCurrentModel();
         const prompt = textarea.value.trim();
+        promptHistory.remember(prompt);
 
         // Validation
         if (!uploadedAudioUrl) {

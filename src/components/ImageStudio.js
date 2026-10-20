@@ -11,6 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop } from '../lib/studioHelpers.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
 import { appendGenerationRefundNotice } from '../../packages/studio/src/utils/generationLifecycle.js';
@@ -173,39 +174,7 @@ export function ImageStudio() {
     };
 
     topRow.appendChild(textarea);
-    // Prompt history: ArrowUp/ArrowDown cycle through the last 10 prompts (persisted in localStorage).
-    const PROMPT_HISTORY_KEY = 'image_prompt_history';
-    const loadPromptHistory = () => {
-        try { return JSON.parse(localStorage.getItem(PROMPT_HISTORY_KEY)) || []; } catch { return []; }
-    };
-    const savePrompt = (text) => {
-        const list = [text, ...loadPromptHistory().filter(p => p !== text)].slice(0, 10);
-        try { localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
-        historyIdx = -1;
-    };
-    let historyIdx = -1;
-    let historyDraft = '';
-    textarea.addEventListener('keydown', (e) => {
-        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-        const list = loadPromptHistory();
-        if (!list.length) return;
-        const atStart = textarea.selectionStart === 0 && textarea.selectionEnd === 0;
-        const atEnd = textarea.selectionStart === textarea.value.length;
-        let next = historyIdx;
-        if (e.key === 'ArrowUp' && (historyIdx >= 0 || atStart || !textarea.value)) {
-            if (historyIdx === -1) historyDraft = textarea.value;
-            next = Math.min(historyIdx + 1, list.length - 1);
-        } else if (e.key === 'ArrowDown' && historyIdx >= 0 && atEnd) {
-            next = historyIdx - 1;
-        } else {
-            return;
-        }
-        e.preventDefault();
-        historyIdx = next;
-        textarea.value = next === -1 ? historyDraft : list[next];
-        textarea.dispatchEvent(new Event('input'));
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-    });
+    const promptHistory = attachPromptHistory(textarea, 'image_prompt_history');
     bar.appendChild(topRow);
 
     // Bottom Row: Controls
@@ -1186,61 +1155,17 @@ export function ImageStudio() {
         }
     };
 
-    // Clipboard only accepts PNG reliably, so re-encode anything else through a canvas.
-    const imageToPngBlob = async (src) => {
-        const blob = await (await fetch(src)).blob();
-        if (blob.type === 'image/png') return blob;
-        const bitmap = await createImageBitmap(blob);
-        const cv = document.createElement('canvas');
-        cv.width = bitmap.width;
-        cv.height = bitmap.height;
-        cv.getContext('2d').drawImage(bitmap, 0, 0);
-        return new Promise((resolve, reject) => cv.toBlob(b => b ? resolve(b) : reject(new Error('PNG encoding failed')), 'image/png'));
-    };
-
-    const copyCurrentImage = async () => {
-        const current = resultImg.src;
-        if (!current) return;
-        const label = t('common.copy');
-        try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageToPngBlob(current) })]);
-            copyBtn.textContent = t('common.copied');
-        } catch (err) {
-            console.error('[ImageStudio] Copy failed:', err);
-            copyBtn.textContent = '✕';
-        }
-        setTimeout(() => { copyBtn.textContent = label; }, 1500);
-    };
-    copyBtn.onclick = copyCurrentImage;
-
-    // Ctrl/Cmd+C copies the image shown full screen (unless the user is selecting text).
-    const onCopyShortcut = (e) => {
-        if (!container.isConnected) { window.removeEventListener('keydown', onCopyShortcut); return; }
-        if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'c') return;
-        if (!canvas.classList.contains('opacity-100')) return;
-        if (String(window.getSelection())) return;
-        e.preventDefault();
-        copyCurrentImage();
-    };
-    window.addEventListener('keydown', onCopyShortcut);
+    attachImageCopy({
+        button: copyBtn,
+        getSrc: () => resultImg.src,
+        isVisible: () => canvas.classList.contains('opacity-100'),
+        container,
+        label: t('common.copy'),
+        doneLabel: t('common.copied'),
+    });
 
     // Paste (Ctrl+V) or drag & drop images onto the studio to use them as reference images.
-    const imageFilesFrom = (dt) => Array.from(dt?.files || []).filter(f => f.type.startsWith('image/'));
-    textarea.addEventListener('paste', (e) => {
-        const files = imageFilesFrom(e.clipboardData);
-        if (!files.length) return; // plain text paste keeps working
-        e.preventDefault();
-        picker.addFiles(files);
-    });
-    container.addEventListener('dragover', (e) => {
-        if (Array.from(e.dataTransfer?.types || []).includes('Files')) e.preventDefault();
-    });
-    container.addEventListener('drop', (e) => {
-        const files = imageFilesFrom(e.dataTransfer);
-        if (!files.length) return;
-        e.preventDefault();
-        picker.addFiles(files);
-    });
+    attachMediaDrop({ container, textarea, image: (files) => picker.addFiles(files) });
 
     regenerateBtn.onclick = () => {
         generateBtn.click();
@@ -1292,7 +1217,7 @@ export function ImageStudio() {
             }
         }
 
-        if (prompt) savePrompt(prompt);
+        promptHistory.remember(prompt);
         const styledPrompt = applyStyle(prompt);
 
         // ── Local inference path ──────────────────────────────────────────────
