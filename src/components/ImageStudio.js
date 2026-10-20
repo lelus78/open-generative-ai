@@ -44,6 +44,10 @@ export function ImageStudio() {
     const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video');
     let useLocalModel = false;
     let selectedLocalModel = LOCAL_IMAGE_MODELS[0]?.id || null;
+    try {
+        const savedLocal = localStorage.getItem('image_local_model');
+        if (LOCAL_IMAGE_MODELS.some(m => m.id === savedLocal)) selectedLocalModel = savedLocal;
+    } catch { /* storage unavailable */ }
     let localGenProgress = 0; // 0–1
 
     // Advanced parameters state
@@ -255,6 +259,7 @@ export function ImageStudio() {
         localToggleBtn.onclick = (e) => {
             e.stopPropagation();
             useLocalModel = !useLocalModel;
+            try { localStorage.setItem('image_use_local', useLocalModel ? '1' : '0'); } catch { /* storage unavailable */ }
             updateLocalToggleStyle();
             // Reflect active model in the button label
             if (useLocalModel) {
@@ -265,6 +270,15 @@ export function ImageStudio() {
             }
         };
         controlsLeft.appendChild(localToggleBtn);
+
+        // Reopen in the mode used last time (needs the container mounted, so wait for it).
+        const restoreLastMode = (tries = 40) => {
+            if (!container.isConnected) { if (tries > 0) setTimeout(() => restoreLastMode(tries - 1), 50); return; }
+            let wasLocal = false;
+            try { wasLocal = localStorage.getItem('image_use_local') === '1'; } catch { /* storage unavailable */ }
+            if (wasLocal && !useLocalModel) localToggleBtn.onclick({ stopPropagation() {} });
+        };
+        setTimeout(restoreLastMode, 0);
     }
 
     controlsLeft.appendChild(modelBtn);
@@ -817,6 +831,7 @@ export function ImageStudio() {
                         item.onclick = (e) => {
                             e.stopPropagation();
                             selectedLocalModel = m.id;
+                            try { localStorage.setItem('image_local_model', m.id); } catch { /* storage unavailable */ }
                             document.getElementById('model-btn-label').textContent = m.name;
                             selectedAr = m.aspectRatios[0];
                             document.getElementById('ar-btn-label').textContent = selectedAr;

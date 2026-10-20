@@ -455,6 +455,7 @@ export function VideoStudio() {
         localToggleBtn.onclick = async (e) => {
             e.stopPropagation();
             useLocalModel = !useLocalModel;
+            try { localStorage.setItem('video_use_local', useLocalModel ? '1' : '0'); } catch { /* storage unavailable */ }
             updateLocalToggleStyle();
             // Uploads and video tools belong to one source — start clean after switching.
             if (v2vMode) {
@@ -479,6 +480,15 @@ export function VideoStudio() {
             textarea.placeholder = t('video.placeholder');
         };
         controlsLeft.appendChild(localToggleBtn);
+
+        // Reopen in the mode used last time (needs the container mounted, so wait for it).
+        const restoreLastMode = (tries = 40) => {
+            if (!container.isConnected) { if (tries > 0) setTimeout(() => restoreLastMode(tries - 1), 50); return; }
+            let wasLocal = false;
+            try { wasLocal = localStorage.getItem('video_use_local') === '1'; } catch { /* storage unavailable */ }
+            if (wasLocal && !useLocalModel) localToggleBtn.onclick({ stopPropagation() {} });
+        };
+        setTimeout(restoreLastMode, 0);
     }
 
     controlsLeft.appendChild(modelBtn);
