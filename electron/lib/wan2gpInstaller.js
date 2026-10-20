@@ -21,19 +21,26 @@ function run(cmd, args, { env, cwd, onLine } = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(cmd, args, { env: { ...process.env, ...env }, cwd, windowsHide: true });
         const tail = [];
-        const onData = (data) => {
-            for (const raw of data.toString().split(/\r?\n|\r/)) {
-                const line = raw.trim();
-                if (!line) continue;
-                tail.push(line);
-                if (tail.length > 30) tail.shift();
-                onLine?.(line);
-            }
+        const emit = (raw) => {
+            const line = raw.trim();
+            if (!line) return;
+            tail.push(line);
+            if (tail.length > 30) tail.shift();
+            onLine?.(line);
         };
-        child.stdout.on('data', onData);
-        child.stderr.on('data', onData);
+        // Output chunks can end mid-line, so keep the unfinished part per stream.
+        const pending = { stdout: '', stderr: '' };
+        const onData = (stream) => (data) => {
+            const parts = (pending[stream] + data.toString()).split(/\r?\n|\r/);
+            pending[stream] = parts.pop();
+            parts.forEach(emit);
+        };
+        child.stdout.on('data', onData('stdout'));
+        child.stderr.on('data', onData('stderr'));
         child.on('error', reject);
         child.on('close', (code) => {
+            emit(pending.stdout);
+            emit(pending.stderr);
             if (code === 0) resolve(tail);
             else reject(new Error(`${path.basename(cmd)} exited with code ${code}\n${tail.slice(-8).join('\n')}`));
         });
@@ -41,6 +48,7 @@ function run(cmd, args, { env, cwd, onLine } = {}) {
 }
 
 function findFile(dir, name) {
+    if (!fs.existsSync(dir)) return null;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isFile() && entry.name === name) return full;
@@ -53,9 +61,13 @@ function findFile(dir, name) {
 }
 
 // `tar` ships with Windows 10+ (bsdtar) and reads zip files too.
+// Use the system one explicitly: a GNU tar earlier on PATH (e.g. Git for Windows) reads "E:\..." as a remote host.
+const TAR = process.platform === 'win32'
+    ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+    : 'tar';
 const extractArchive = (archive, dest) => {
     fs.mkdirSync(dest, { recursive: true });
-    return run('tar', ['-xf', archive, '-C', dest]);
+    return run(TAR, ['-xf', archive, '-C', dest]);
 };
 
 async function detectTorchBuild() {
