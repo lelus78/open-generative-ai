@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -816,8 +816,7 @@ export function LipSyncStudio() {
             // ─── Local Wan2GP path ───────────────────────────────────────────
             if (useLocalModel) {
                 const unsubscribe = localAI.onProgress((event) => {
-                    const label = event.totalSteps ? `${event.step}/${event.totalSteps}` : (event.message || '…');
-                    generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${label}`;
+                    generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${localProgressLabel(event)}`;
                 });
                 try {
                     const res = await localAI.generate({

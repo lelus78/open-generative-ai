@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
@@ -25,19 +25,6 @@ const adaptLocalToVideoEntry = (m) => ({
 });
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-const formatBytes = (bytes) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
-
-// Progress label for a Wan2GP event ({ status, step, totalSteps, downloadedBytes, message }).
-const localProgressLabel = ({ status, step, totalSteps, downloadedBytes, message }) => {
-    if (status === 'downloading') return tf('video.localDownloading', formatBytes(downloadedBytes || 0));
-    if (status === 'loading') return t('video.localLoading');
-    if (status === 'encoding') return t('video.localEncoding');
-    if (status === 'generating' && totalSteps) return tf('video.localStep', step, totalSteps);
-    if (status === 'decoding') return t('video.localDecoding');
-    if (status === 'saving' || status === 'done') return t('video.localSaving');
-    return message || t('video.localStarting');
-};
 
 export function VideoStudio() {
     const container = document.createElement('div');

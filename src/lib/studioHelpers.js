@@ -1,3 +1,5 @@
+import { t, tf } from './i18n.js';
+
 // Behaviour shared by the studios (Image, Video, Cinema, Lip Sync): prompt history,
 // copying a result to the clipboard, and paste / drag & drop of media files.
 
@@ -231,4 +233,21 @@ export function attachResultMenu(element, buttons) {
         }));
         showPopupMenu(e, items);
     });
+}
+
+export const formatBytes = (bytes) => bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.round(bytes / 1024 ** 2)} MB`;
+
+/**
+ * Text for a progress event of a local generation ({ status, step, totalSteps, downloadedBytes, message }).
+ * Wan2GP downloads the weights of a model the first time it is used and reports it as status
+ * 'downloading', which must not be shown as a generation percentage.
+ */
+export function localProgressLabel({ status, step, totalSteps, downloadedBytes, message }) {
+    if (status === 'downloading') return tf('video.localDownloading', formatBytes(downloadedBytes || 0));
+    if (status === 'loading') return t('video.localLoading');
+    if (status === 'encoding') return t('video.localEncoding');
+    if (status === 'generating' && totalSteps) return tf('video.localStep', step, totalSteps);
+    if (status === 'decoding') return t('video.localDecoding');
+    if (status === 'saving' || status === 'done') return t('video.localSaving');
+    return message || t('video.localStarting');
 }

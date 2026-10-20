@@ -7,7 +7,7 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
@@ -701,8 +701,7 @@ export function CinemaStudio() {
         try {
             if (useLocalModel) {
                 unsubscribeProgress = localAI.onProgress((event) => {
-                    const label = event.totalSteps ? `${event.step}/${event.totalSteps}` : (event.message || t('cinema.shooting'));
-                    generateBtn.innerHTML = label;
+                    generateBtn.innerHTML = localProgressLabel(event);
                 });
             }
             // Translate only the user's subject, then compose the look around the English text.

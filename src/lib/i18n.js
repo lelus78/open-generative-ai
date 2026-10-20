@@ -186,6 +186,7 @@ const translations = {
         'video.localStarting': 'Starting Wan2GP...',
         'video.localDownloading': (size) => `Downloading model weights... ${size}`,
         'video.localLoading': 'Loading model...',
+        'video.localDownloadingShort': 'Downloading model…',
         'video.localEncoding': 'Encoding prompt...',
         'video.localStep': (step, total) => `Denoising step ${step}/${total}`,
         'video.localDecoding': 'Decoding video...',

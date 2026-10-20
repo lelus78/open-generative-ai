@@ -11,7 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
@@ -297,7 +297,7 @@ export function ImageStudio() {
     localProgressWrap.id = 'local-progress-wrap';
     localProgressWrap.innerHTML = `
         <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-white/60">${t('image.generatingLocally')}</span>
+            <span id="local-progress-title" class="text-xs font-bold text-white/60">${t('image.generatingLocally')}</span>
             <span id="local-progress-pct" class="text-xs font-bold text-primary">0%</span>
         </div>
         <div class="h-1.5 rounded-full bg-white/10 overflow-hidden">
@@ -1244,12 +1244,23 @@ export function ImageStudio() {
             progressWrap.classList.remove('hidden');
             progressWrap.classList.add('flex');
 
-            const unsub = localAI.onProgress(({ progress, status, message }) => {
-                const pct = Math.round((progress ?? 0) * 100);
-                const label = message || (status === 'starting' ? 'Starting...' : `${pct}%`);
-                if (progressFill) progressFill.style.width = `${pct}%`;
-                if (progressPct) progressPct.textContent = label;
-                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${label}`;
+            const progressTitle = document.getElementById('local-progress-title');
+            if (!localFitInfo.size) localFitInfo = await loadFitInfo();
+            const unsub = localAI.onProgress((event) => {
+                const pct = Math.round((event.progress ?? 0) * 100);
+                const label = localProgressLabel(event);
+                // Downloading weights has no real percentage: show a pulsing bar and the amount instead.
+                const downloading = event.status === 'downloading';
+                // With the estimated size of the download (from the model list) the bar can show real progress.
+                const expectedGB = downloading ? localFitInfo.get(selectedLocalModel)?.downloadGB : null;
+                const knownFraction = expectedGB ? Math.min(0.99, (event.downloadedBytes || 0) / (expectedGB * 1024 ** 3)) : null;
+                if (progressTitle) progressTitle.textContent = expectedGB ? `${label} · ~${expectedGB} GB` : label;
+                if (progressFill) {
+                    progressFill.style.width = downloading ? (knownFraction === null ? '100%' : `${Math.round(knownFraction * 100)}%`) : `${pct}%`;
+                    progressFill.classList.toggle('animate-pulse', downloading && knownFraction === null);
+                }
+                if (progressPct) progressPct.textContent = downloading || event.status === 'starting' ? '' : `${pct}%`;
+                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${downloading ? t('video.localDownloadingShort') : label}`;
             });
 
             let hadError = false;
