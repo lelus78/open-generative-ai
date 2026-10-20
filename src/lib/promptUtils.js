@@ -54,6 +54,51 @@ export const APERTURE_EFFECT = {
     "f/11": "deep focus clarity, sharp foreground to background"
 };
 
+// Visual outcome of each camera / lens choice, without naming any equipment. Local text-to-image
+// models take "shot on a ... camera, using a ... lens" literally and draw people holding cameras,
+// whereas cloud models read it as photographic style. These are used for local generation.
+export const CAMERA_LOOK = {
+    "Modular 8K Digital": "razor-sharp 8K digital image, clean modern cinematic look",
+    "Full-Frame Cine Digital": "full-frame cinematic image, natural skin tones, wide dynamic range",
+    "Grand Format 70mm Film": "immense large-format detail, rich fine film grain",
+    "Studio Digital S35": "Super 35 cinematic image, balanced contrast, clean color",
+    "Classic 16mm Film": "visible fine grain, soft contrast, faded vintage color",
+    "Premium Large Format Digital": "large-format digital look, smooth tonal gradation, high detail"
+};
+
+export const LENS_LOOK = {
+    "Creative Tilt Lens": "tilt-shift selective focus, dreamy blur falloff",
+    "Compact Anamorphic": "anamorphic widescreen look, horizontal light streaks, oval bokeh",
+    "Extreme Macro": "extreme close-up macro detail, razor-thin focus plane",
+    "70s Cinema Prime": "1970s vintage cinema look, soft glow, warm color cast",
+    "Classic Anamorphic": "classic anamorphic widescreen look, blue horizontal flares, oval bokeh",
+    "Premium Modern Prime": "crisp modern look, clean contrast, neutral color",
+    "Warm Cinema Prime": "warm golden color rendering, gentle contrast",
+    "Swirl Bokeh Portrait": "swirling bokeh background, strong subject separation",
+    "Vintage Prime": "vintage look, soft edges, gentle vignette",
+    "Halation Diffusion": "halation glow around highlights, soft diffused highlights",
+    "Clinical Sharp Prime": "ultra-sharp clinical detail, high micro-contrast"
+};
+
+/**
+ * Same settings as buildNanoBananaPrompt, phrased as a look instead of equipment, for local models.
+ */
+export function buildLocalCinemaPrompt(basePrompt, camera, lens, focalLength, aperture) {
+    const parts = [
+        basePrompt,
+        "cinematic still",
+        CAMERA_LOOK[camera] || "",
+        LENS_LOOK[lens] || "",
+        FOCAL_PERSPECTIVE[focalLength] || "",
+        APERTURE_EFFECT[aperture] || "",
+        "cinematic lighting",
+        "natural color grading",
+        "high dynamic range",
+        "highly detailed"
+    ];
+    return parts.filter(p => p && p.trim() !== "").join(", ");
+}
+
 /**
  * Compiles a cinematic prompt based on camera settings.
  * @param {string} basePrompt 

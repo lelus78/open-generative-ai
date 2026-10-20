@@ -1,7 +1,7 @@
 
 import { muapi } from '../lib/muapi.js';
 import { CameraControls } from './CameraControls.js';
-import { buildNanoBananaPrompt, CAMERA_MAP, LENS_MAP, FOCAL_PERSPECTIVE, APERTURE_EFFECT } from '../lib/promptUtils.js';
+import { buildNanoBananaPrompt, buildLocalCinemaPrompt, CAMERA_MAP, LENS_MAP, FOCAL_PERSPECTIVE, APERTURE_EFFECT } from '../lib/promptUtils.js';
 import { AuthModal } from './AuthModal.js';
 import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
@@ -686,7 +686,9 @@ export function CinemaStudio() {
         generateBtn.innerHTML = t('cinema.shooting');
 
         // Compile Prompt
-        const finalPrompt = buildNanoBananaPrompt(
+        // Cloud models read camera terms as photographic style; local ones would draw the camera itself.
+        const compilePrompt = useLocalModel ? buildLocalCinemaPrompt : buildNanoBananaPrompt;
+        const finalPrompt = compilePrompt(
             basePrompt,
             currentSettings.camera,
             currentSettings.lens,
@@ -705,7 +707,7 @@ export function CinemaStudio() {
             const res = useLocalModel ? await localAI.generate({
                 model: selectedLocalModel,
                 prompt: finalPrompt,
-                negative_prompt: 'blurry, low quality, distortion, bad composition',
+                negative_prompt: 'blurry, low quality, distortion, bad composition, camera, tripod, film crew, photographer',
                 aspect_ratio: currentSettings.aspect_ratio,
             }) : await muapi.generateImage({
                 model: 'nano-banana-pro',
@@ -723,8 +725,8 @@ export function CinemaStudio() {
                     model: useLocalModel ? `local:${selectedLocalModel}` : 'nano-banana-pro',
                     timestamp: Date.now(),
                     settings: {
-                        prompt: basePrompt,
                         ...currentSettings,
+                        prompt: basePrompt, // after the spread: currentSettings.prompt is always empty
                         resolution: resBtn.dataset.value
                     }
                 });
