@@ -78,5 +78,5 @@ test('legacy models are only demoted on GPUs with enough VRAM for newer ones', (
     assert.equal(shouldDemoteLegacy(small), false);
     assert.equal(shouldDemoteLegacy(null), false);
     assert.equal(withWan2gpAvailability(model, { ok: true, mode: 'local', hardware: big, modelStatus: status }).legacyDemoted, true);
-    assert.equal(withWan2gpAvailability(model, { ok: true, mode: 'local', hardware: small, modelStatus: status }).legacyDemoted, false);
+    assert.equal(withWan2gpAvailability(model, { ok: true, mode: 'local', hardware: { vramGB: 8, ramGB: 32, freeDiskGB: 500 }, modelStatus: status }).legacyDemoted, false);
 });
