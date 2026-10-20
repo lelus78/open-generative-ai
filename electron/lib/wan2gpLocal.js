@@ -40,13 +40,21 @@ function checkInstall(install) {
 //   'missing'       — the model is defined but its weights are not downloaded yet
 //   'installed'     — defined, weight files could not be determined
 //   (absent)        — no defaults/<type>.json: this Wan2GP version lacks the model
+// A definition's URLs is either a list of weight files or the name of another definition whose
+// weights it shares (e.g. i2v_fusionix -> "i2v"). Follow that chain a few levels.
+function resolveWeightUrls(defaultsDir, modelType, depth = 0) {
+    let urls = null;
+    try { urls = JSON.parse(fs.readFileSync(path.join(defaultsDir, `${modelType}.json`), 'utf-8'))?.model?.URLs; } catch { /* unreadable def */ }
+    if (typeof urls === 'string' && depth < 3) return resolveWeightUrls(defaultsDir, urls, depth + 1);
+    return Array.isArray(urls) ? urls : null;
+}
+
 function localModelStatus(install, modelTypes) {
     const statuses = new Map();
     for (const modelType of modelTypes) {
         const defPath = path.join(install.defaultsDir, `${modelType}.json`);
         if (!fs.existsSync(defPath)) continue;
-        let urls = null;
-        try { urls = JSON.parse(fs.readFileSync(defPath, 'utf-8'))?.model?.URLs; } catch { /* unreadable def */ }
+        const urls = resolveWeightUrls(install.defaultsDir, modelType);
         if (!Array.isArray(urls) || urls.length === 0) {
             statuses.set(modelType, 'installed');
             continue;

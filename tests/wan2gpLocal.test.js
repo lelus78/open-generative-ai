@@ -39,14 +39,20 @@ test('localModelStatus reads defaults/*.json and checks ckpts for weights', () =
     const def = (urls) => JSON.stringify({ model: { name: 'x', URLs: urls } });
     fs.writeFileSync(path.join(dir, 'defaults', 't2v_1.3B.json'), def(['https://hf.co/x/resolve/main/wan_1.3B.safetensors']));
     fs.writeFileSync(path.join(dir, 'defaults', 't2v_2_2.json'), def(['https://hf.co/x/resolve/main/wan22_bf16.safetensors', 'https://hf.co/x/resolve/main/wan22_int8.safetensors']));
+    // A string URLs shares the weights of another definition ...
     fs.writeFileSync(path.join(dir, 'defaults', 'flux.json'), def('t2v_1.3B'));
+    fs.writeFileSync(path.join(dir, 'defaults', 'shares_missing.json'), def('t2v_2_2'));
+    // ... and when that definition does not exist the weight files are unknown.
+    fs.writeFileSync(path.join(dir, 'defaults', 'shares_unknown.json'), def('no_such_definition'));
     fs.writeFileSync(path.join(dir, 'ckpts', 'wan_1.3B.safetensors'), '');
 
-    const status = local.localModelStatus(local.resolveInstall({ dir }), ['t2v_1.3B', 't2v_2_2', 'flux', 'ltx2_22B_distilled']);
+    const status = local.localModelStatus(local.resolveInstall({ dir }), ['t2v_1.3B', 't2v_2_2', 'flux', 'shares_missing', 'shares_unknown', 'ltx2_22B_distilled']);
 
     assert.equal(status.get('t2v_1.3B'), 'available');
     assert.equal(status.get('t2v_2_2'), 'missing');
-    assert.equal(status.get('flux'), 'installed');
+    assert.equal(status.get('flux'), 'available');
+    assert.equal(status.get('shares_missing'), 'missing');
+    assert.equal(status.get('shares_unknown'), 'installed');
     assert.equal(status.has('ltx2_22B_distilled'), false);
 });
 
