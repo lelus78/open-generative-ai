@@ -154,7 +154,7 @@ export function CinemaStudio() {
     // 2. Settings Toolbar (Bottom Left)
     // 2. Settings Toolbar (Bottom Left)
     const settingsToolbar = document.createElement('div');
-    settingsToolbar.className = 'flex items-center gap-3'; // Removed pl-11 to align left
+    settingsToolbar.className = 'flex flex-wrap items-center gap-2'; // Removed pl-11 to align left
 
     // Helper: Create Dropdown
     const createDropdown = (items, selected, onSelect, trigger) => {
