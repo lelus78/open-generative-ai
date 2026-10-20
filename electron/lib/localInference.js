@@ -508,7 +508,18 @@ function arToDimensions(ar, modelType) {
         '4:3': [Math.round(base * 4 / 3 / 64) * 64, base],
         '3:4': [base, Math.round(base * 4 / 3 / 64) * 64],
     };
-    return map[ar] || [base, base];
+    if (map[ar]) return map[ar];
+
+    // Any other "w:h" ratio (e.g. 3:2, 2:3, 21:9): keep the short side at `base`, cap the long side.
+    const m = /^(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)$/.exec(String(ar || '').trim());
+    const rw = m ? Number(m[1]) : 0;
+    const rh = m ? Number(m[2]) : 0;
+    if (!(rw > 0 && rh > 0)) return [base, base];
+    const maxSide = base * 1.75;
+    const snap = (v) => Math.max(64, Math.round(v / 64) * 64);
+    return rw >= rh
+        ? [snap(Math.min(base * rw / rh, maxSide)), base]
+        : [base, snap(Math.min(base * rh / rw, maxSide))];
 }
 
 async function generate(params, mainWindow) {
