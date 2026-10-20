@@ -80,3 +80,35 @@ test('buildWan2gpSettings passes the start frame as image_start and requires it 
     assert.equal(settings.image_start, '/tmp/start.png');
     assert.equal(settings.model_type, 'i2v_2_2');
 });
+
+test('lip sync model: audio + portrait settings, both required', () => {
+    const model = getModelById('wan2gp:infinitetalk');
+    assert.equal(model.lipsync, true);
+
+    const settings = buildWan2gpSettings(model, { prompt: 'hello', aspect_ratio: '16:9', seed: 5 }, { imageStart: '/in/face.png', audioStart: '/in/voice.wav' });
+    assert.equal(settings.model_type, 'infinitetalk');
+    assert.equal(settings.audio_guide, '/in/voice.wav');
+    assert.equal(settings.audio_prompt_type, 'A');
+    assert.equal(settings.image_prompt_type, 'S');
+    assert.equal(settings.image_start, '/in/face.png');
+    assert.deepEqual(settings.image_refs, ['/in/face.png']);
+    assert.equal(settings.video_length, 1000);
+    assert.equal(settings.resolution, '832x480');
+
+    assert.throws(() => buildWan2gpSettings(model, {}, { imageStart: '/in/face.png' }), /audio file/);
+    assert.throws(() => buildWan2gpSettings(model, {}, { audioStart: '/in/voice.wav' }), /start-frame image/);
+});
+
+test('plain image-to-video models never get audio settings', () => {
+    const model = getModelById('wan2gp:wan22-i2v');
+    const settings = buildWan2gpSettings(model, { seed: 1 }, { imageStart: '/in/a.png' });
+    assert.equal(settings.audio_guide, undefined);
+    assert.equal(settings.image_refs, undefined);
+});
+
+test('lip sync gets a default prompt when none is given (Wan2GP rejects empty prompts)', () => {
+    const model = getModelById('wan2gp:infinitetalk');
+    const settings = buildWan2gpSettings(model, { prompt: '' }, { imageStart: '/in/a.png', audioStart: '/in/a.wav' });
+    assert.ok(settings.prompt.length > 0);
+    assert.equal(buildWan2gpSettings(getModelById('wan2gp:wan22-i2v'), {}, { imageStart: '/in/a.png' }).prompt, '');
+});

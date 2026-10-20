@@ -1,7 +1,10 @@
 import { muapi } from '../lib/muapi.js';
 import { lipsyncModels, imageLipSyncModels, videoLipSyncModels, getLipSyncModelById, getResolutionsForLipSyncModel } from '../lib/models.js';
 import { AuthModal } from './AuthModal.js';
-import { t } from '../lib/i18n.js';
+import { t, tf } from '../lib/i18n.js';
+import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
+import { localLipSyncModels } from '../lib/localModels.js';
+import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { attachPromptHistory, attachMediaDrop, feedFileInput } from '../lib/studioHelpers.js';
@@ -21,8 +24,16 @@ export function LipSyncStudio() {
     let uploadedAudioUrl = null;
     let dropdownOpen = null;
 
-    const getCurrentModels = () => inputMode === 'image' ? imageLipSyncModels : videoLipSyncModels;
-    const getCurrentModel = () => lipsyncModels.find(m => m.id === selectedModel);
+    // Local (Wan2GP) lip sync models live apart from the cloud ones; the "Local" toggle, shown only
+    // in the desktop app, picks which set the model dropdown and generation use.
+    const localModels = isLocalAIAvailable()
+        ? localLipSyncModels.map(m => ({ id: m.id, name: m.name, description: m.description, provider: 'wan2gp', hasPrompt: true, inputs: {} }))
+        : [];
+    let useLocalModel = false;
+    let localAvailability = new Map(); // id → readiness / fit reported by the desktop app
+
+    const getCurrentModels = () => useLocalModel ? localModels : (inputMode === 'image' ? imageLipSyncModels : videoLipSyncModels);
+    const getCurrentModel = () => (useLocalModel ? localModels : lipsyncModels).find(m => m.id === selectedModel);
 
     // ==========================================
     // 1. HERO SECTION
@@ -95,6 +106,8 @@ export function LipSyncStudio() {
     // ── Image Upload — uses createUploadPicker (same as VideoStudio) ──
     const imagePicker = createUploadPicker({
         anchorContainer: container,
+        uploadFn: (file) => useLocalModel ? localAI.uploadFileToWan2gp(file) : muapi.uploadFile(file),
+        requireApiKey: () => !useLocalModel,
         onSelect: ({ url }) => {
             uploadedImageUrl = url;
             imageStatusLabel.textContent = t('lipsync.imageReady');
@@ -239,10 +252,13 @@ export function LipSyncStudio() {
         const file = e.target.files[0];
         if (!file) return;
         const apiKey = localStorage.getItem('muapi_key');
-        if (!apiKey) { AuthModal(() => audioFileInput.click()); return; }
+        if (!useLocalModel && !apiKey) { AuthModal(() => audioFileInput.click()); return; }
         showAudioSpinner();
         try {
-            uploadedAudioUrl = await muapi.uploadFile(file);
+            // Local mode: the file is saved on this PC and handed to Wan2GP by path.
+            uploadedAudioUrl = useLocalModel
+                ? (await localAI.uploadFileToWan2gp(file)).url
+                : await muapi.uploadFile(file);
             showAudioReady(file.name);
         } catch (err) { showAudioIcon(); alert(`Audio upload failed: ${err.message}`); }
         audioFileInput.value = '';
@@ -332,13 +348,18 @@ export function LipSyncStudio() {
     const populateDropdown = (type) => {
         dropdown.innerHTML = '';
         if (type === 'model') {
-            const models = getCurrentModels();
+            const models = useLocalModel ? sortByFit(getCurrentModels(), m => localAvailability.get(m.id)) : getCurrentModels();
             models.forEach(m => {
                 const item = document.createElement('button');
                 item.type = 'button';
-                item.className = `w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all hover:bg-white/10 ${m.id === selectedModel ? 'text-primary font-bold bg-primary/5' : 'text-white font-medium'}`;
-                item.innerHTML = `<div>${m.name}</div><div class="text-xs text-muted mt-0.5">${m.description?.slice(0, 60)}...</div>`;
+                const info = useLocalModel ? localAvailability.get(m.id) : null;
+                const blocked = !!info && info.ready === false;
+                item.className = `w-full text-left px-4 py-2.5 rounded-xl text-sm transition-all ${blocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/10'} ${m.id === selectedModel ? 'text-primary font-bold bg-primary/5' : 'text-white font-medium'}`;
+                const note = blocked ? info.unavailableReason : (info?.availabilityNote || '');
+                const desc = useLocalModel ? (m.description || '') : `${m.description?.slice(0, 60)}...`;
+                item.innerHTML = `<div>${m.name} ${info ? downloadedBadgeHtml(info) + fitBadgeHtml(info) : ''}</div><div class="text-xs text-muted mt-0.5">${desc}</div>${note ? `<div class="text-[10px] text-yellow-400/80 mt-0.5">${String(note).replace(/[<>&]/g, '')}</div>` : ''}`;
                 item.onclick = () => {
+                    if (blocked) return;
                     selectedModel = m.id;
                     document.getElementById('ls-model-btn-label').textContent = m.name;
                     const resolutions = getResolutionsForLipSyncModel(selectedModel);
@@ -456,6 +477,61 @@ export function LipSyncStudio() {
         imagePicker.reset();
         updateUIForMode();
     };
+
+    // ── Local (Wan2GP) / cloud (API) switch — desktop app only ──
+    const refreshLocalAvailability = async () => {
+        try {
+            const models = await localAI.listModels();
+            localAvailability = new Map(models.filter(m => m.provider === 'wan2gp').map(m => [m.id, m]));
+        } catch (err) {
+            console.warn('[LipSyncStudio] Could not read Wan2GP status:', err);
+        }
+    };
+
+    if (isLocalAIAvailable()) {
+        const localToggleBtn = document.createElement('button');
+        localToggleBtn.id = 'ls-local-toggle-btn';
+        localToggleBtn.type = 'button';
+        const updateLocalToggleStyle = () => {
+            localToggleBtn.className = useLocalModel
+                ? 'flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-xs font-bold whitespace-nowrap bg-primary/20 border-primary/40 text-primary'
+                : 'flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-xs font-bold whitespace-nowrap bg-white/5 border-white/5 text-white/60 hover:bg-white/10';
+            localToggleBtn.textContent = useLocalModel ? t('image.local') : t('image.api');
+        };
+        updateLocalToggleStyle();
+        localToggleBtn.onclick = async (e) => {
+            e.stopPropagation();
+            useLocalModel = !useLocalModel;
+            try { localStorage.setItem('lipsync_use_local', useLocalModel ? '1' : '0'); } catch { /* storage unavailable */ }
+            updateLocalToggleStyle();
+            // Cloud uploads and files on this PC are different things — start clean after switching.
+            imagePicker.reset();
+            uploadedImageUrl = null;
+            uploadedVideoUrl = null;
+            uploadedAudioUrl = null;
+            showVideoIcon();
+            showAudioIcon();
+            audioStatusLabel.textContent = t('lipsync.noAudio');
+            audioStatusLabel.className = 'text-muted';
+            // Local lip sync works from a portrait image + audio only.
+            if (useLocalModel) {
+                inputMode = 'image';
+                await refreshLocalAvailability();
+            }
+            videoModeBtn.classList.toggle('hidden', useLocalModel);
+            updateUIForMode();
+        };
+        bottomRow.insertBefore(localToggleBtn, modelBtn);
+
+        // Reopen in the mode used last time (needs the container mounted, so wait for it).
+        const restoreLastMode = (tries = 40) => {
+            if (!container.isConnected) { if (tries > 0) setTimeout(() => restoreLastMode(tries - 1), 50); return; }
+            let wasLocal = false;
+            try { wasLocal = localStorage.getItem('lipsync_use_local') === '1'; } catch { /* storage unavailable */ }
+            if (wasLocal && !useLocalModel) localToggleBtn.onclick({ stopPropagation() {} });
+        };
+        setTimeout(restoreLastMode, 0);
+    }
 
     // Hide resolution if first model has none
     if (getResolutionsForLipSyncModel(selectedModel).length === 0) {
@@ -662,6 +738,19 @@ export function LipSyncStudio() {
     // ==========================================
     // 8. GENERATION LOGIC
     // ==========================================
+    // Pick the closest supported frame shape from the portrait itself (falls back to 16:9).
+    const probeAspect = (url) => new Promise((resolve) => {
+        const img = new Image();
+        const timer = setTimeout(() => resolve('16:9'), 3000);
+        img.onload = () => {
+            clearTimeout(timer);
+            const ratio = img.naturalWidth / img.naturalHeight;
+            resolve(ratio > 1.3 ? '16:9' : ratio < 0.77 ? '9:16' : '1:1');
+        };
+        img.onerror = () => { clearTimeout(timer); resolve('16:9'); };
+        img.src = url;
+    });
+
     generateBtn.onclick = async () => {
         const model = getCurrentModel();
         const prompt = textarea.value.trim();
@@ -681,8 +770,17 @@ export function LipSyncStudio() {
             return;
         }
 
-        const apiKey = localStorage.getItem('muapi_key');
-        if (!apiKey) { AuthModal(() => generateBtn.click()); return; }
+        if (useLocalModel) {
+            if (!localAvailability.size) await refreshLocalAvailability();
+            const status = localAvailability.get(selectedModel);
+            if (status && !status.ready) { alert(status.unavailableReason); return; }
+            // Never start a multi-GB download without asking first.
+            const modelName = getCurrentModel()?.name || selectedModel;
+            if (status?.needsDownload && !confirm(tf('fit.confirmDownload', modelName, status.downloadGB ?? '?'))) return;
+        } else {
+            const apiKey = localStorage.getItem('muapi_key');
+            if (!apiKey) { AuthModal(() => generateBtn.click()); return; }
+        }
 
         hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
         generateBtn.disabled = true;
@@ -698,6 +796,29 @@ export function LipSyncStudio() {
         };
 
         try {
+            // ─── Local Wan2GP path ───────────────────────────────────────────
+            if (useLocalModel) {
+                const unsubscribe = localAI.onProgress((event) => {
+                    const label = event.totalSteps ? `${event.step}/${event.totalSteps}` : (event.message || '…');
+                    generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${label}`;
+                });
+                try {
+                    const res = await localAI.generate({
+                        model: selectedModel,
+                        prompt: prompt || '',
+                        image: uploadedImageUrl,
+                        audio: uploadedAudioUrl,
+                        aspect_ratio: await probeAspect(uploadedImageUrl),
+                    });
+                    if (!res?.url) throw new Error('No video URL returned by Wan2GP');
+                    addToHistory({ id: Date.now().toString(), url: res.url, prompt, model: selectedModel, timestamp: new Date().toISOString() });
+                    showVideoInCanvas(res.url);
+                } finally {
+                    unsubscribe();
+                }
+                return;
+            }
+
             const lipsyncParams = {
                 model: selectedModel,
                 audio_url: uploadedAudioUrl,
@@ -733,6 +854,7 @@ export function LipSyncStudio() {
             if (capturedRequestId) removePendingJob(capturedRequestId);
             console.error(e);
             hero.classList.remove('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
+            if (useLocalModel) alert(e.message);
             generateBtn.innerHTML = `Error: ${e.message.slice(0, 60)}`;
             setTimeout(() => { generateBtn.innerHTML = t('common.generate'); }, 4000);
         } finally {

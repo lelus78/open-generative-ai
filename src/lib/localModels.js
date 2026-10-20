@@ -227,6 +227,20 @@ export const LOCAL_MODEL_CATALOG = [
         tags: ['video', 'hunyuan', 'image-to-video', 'fast'],
     },
     {
+        id: 'wan2gp:infinitetalk',
+        name: 'InfiniteTalk (Portrait + Audio)',
+        description: 'Lip sync — makes a portrait speak your audio file (480p). Any audio length. Heavy 14B model, expect long renders.',
+        type: 'video',
+        family: 'wan',
+        provider: 'wan2gp',
+        modelType: 'infinitetalk',
+        needsImage: true,
+        needsAudio: true,
+        lipsync: true,
+        aspectRatios: ['16:9', '9:16', '1:1'],
+        tags: ['video', 'lipsync', 'audio-to-video'],
+    },
+    {
         id: 'wan2gp:ltx-video',
         name: 'LTX-2 Distilled (Wan2GP)',
         description: 'Video — LTX-2 distilled, 8 steps, 720p. Fastest large video model in Wan2GP.',
@@ -246,5 +260,7 @@ export function getLocalModelById(id) {
 export const isWan2gpModelId = (id) => getLocalModelById(id)?.provider === 'wan2gp';
 export const isLocalModelId  = (id) => !!getLocalModelById(id);
 
-export const localT2VModels = LOCAL_MODEL_CATALOG.filter(m => m.provider === 'wan2gp' && m.type === 'video' && !m.needsImage);
-export const localI2VModels = LOCAL_MODEL_CATALOG.filter(m => m.provider === 'wan2gp' && m.type === 'video' &&  m.needsImage);
+export const localT2VModels = LOCAL_MODEL_CATALOG.filter(m => m.provider === 'wan2gp' && m.type === 'video' && !m.needsImage && !m.lipsync);
+export const localI2VModels = LOCAL_MODEL_CATALOG.filter(m => m.provider === 'wan2gp' && m.type === 'video' &&  m.needsImage && !m.lipsync);
+// Audio-driven (lip sync) models, used by the Lip Sync studio only.
+export const localLipSyncModels = LOCAL_MODEL_CATALOG.filter(m => m.provider === 'wan2gp' && m.lipsync);

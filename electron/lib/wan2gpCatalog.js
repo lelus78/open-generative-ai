@@ -155,6 +155,21 @@ const WAN2GP_CATALOG = [
         tags: ['video', 'hunyuan', 'image-to-video', 'fast'],
     },
     {
+        id: 'wan2gp:infinitetalk',
+        name: 'InfiniteTalk (Portrait + Audio)',
+        description: 'Lip sync — makes a portrait speak your audio file (480p). Any audio length. Heavy 14B model, expect long renders.',
+        type: 'video',
+        family: 'wan',
+        provider: 'wan2gp',
+        modelType: 'infinitetalk',
+        needsImage: true,
+        needsAudio: true,
+        lipsync: true,
+        resolutions: RES_480P,
+        aspectRatios: ['16:9', '9:16', '1:1'],
+        tags: ['video', 'lipsync', 'audio-to-video'],
+    },
+    {
         id: 'wan2gp:ltx-video',
         name: 'LTX-2 Distilled (Wan2GP)',
         description: 'Video — LTX-2 distilled, 8 steps, 720p. Fastest large video model in Wan2GP.',
@@ -172,6 +187,10 @@ function getModelById(id) {
     return WAN2GP_CATALOG.find(m => m.id === id) || null;
 }
 
+// Wan2GP trims audio-driven clips to the audio length; this only caps very long recordings (~40 s at 25 fps).
+const MAX_AUDIO_DRIVEN_FRAMES = 1000;
+const DEFAULT_LIPSYNC_PROMPT = 'A person speaking naturally to the camera, with expressive lip sync.';
+
 function toInt(value) {
     if (value === null || value === undefined || value === '') return null;
     const n = Number(value);
@@ -182,15 +201,19 @@ function toInt(value) {
 // Only fields the user actually chose are set; everything else falls back to the
 // model's own defaults in Wan2GP, which are tuned per model (distilled models use
 // few steps, LTX has its own frame count, etc.).
-function buildWan2gpSettings(model, params = {}, { imageStart } = {}) {
+function buildWan2gpSettings(model, params = {}, { imageStart, audioStart } = {}) {
     if (!model?.modelType) throw new Error('Unknown Wan2GP model');
     if (model.needsImage && !imageStart) {
         throw new Error(`${model.name} requires a start-frame image — upload one first.`);
     }
+    if (model.needsAudio && !audioStart) {
+        throw new Error(`${model.name} requires an audio file — upload one first.`);
+    }
 
     const settings = {
         model_type: model.modelType,
-        prompt: params.prompt || '',
+        // Wan2GP rejects an empty prompt; lip sync users usually only provide a portrait and audio.
+        prompt: params.prompt || (model.lipsync ? DEFAULT_LIPSYNC_PROMPT : ''),
     };
     if (params.negative_prompt) settings.negative_prompt = params.negative_prompt;
 
@@ -207,6 +230,18 @@ function buildWan2gpSettings(model, params = {}, { imageStart } = {}) {
     settings.seed = seed !== null && seed >= 0 ? seed : Math.floor(Math.random() * 2147483647);
 
     if (imageStart) settings.image_start = imageStart;
+
+    if (audioStart) {
+        // Audio-driven (lip sync) models: the portrait is both the first frame and the identity
+        // reference, and the clip lasts as long as the audio (video_length is only an upper bound).
+        settings.audio_guide = audioStart;
+        settings.audio_prompt_type = 'A';
+        if (model.lipsync) {
+            settings.image_prompt_type = 'S';
+            settings.image_refs = [imageStart];
+            settings.video_length = MAX_AUDIO_DRIVEN_FRAMES;
+        }
+    }
     return settings;
 }
 

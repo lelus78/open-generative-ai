@@ -148,11 +148,11 @@ function saveInput({ name, type, bytes }) {
     return { url: pathToFileURL(filePath).href, path: filePath };
 }
 
-function inputPath(image) {
-    if (!image) return null;
-    const filePath = String(image).startsWith('file:') ? fileURLToPath(image) : String(image);
+function inputPath(file) {
+    if (!file) return null;
+    const filePath = String(file).startsWith('file:') ? fileURLToPath(file) : String(file);
     if (!path.isAbsolute(filePath) || !fs.existsSync(filePath)) {
-        throw new Error('Start-frame image is not available on this machine — upload it again.');
+        throw new Error('An input file is not available on this machine — upload it again.');
     }
     return filePath;
 }
@@ -176,6 +176,7 @@ async function generate(params, mainWindow) {
 
     const send = (data) => mainWindow?.webContents.send('local-ai:progress', data);
     const imagePath = inputPath(params.image);
+    const audioPath = inputPath(params.audio);
     const runDir = path.join(RUNS_DIR, `${Date.now()}`);
     fs.mkdirSync(runDir, { recursive: true });
     const run = { cancelled: false, cancel: () => {} };
@@ -187,7 +188,7 @@ async function generate(params, mainWindow) {
             const install = local.resolveInstall(cfg);
             const installCheck = local.checkInstall(install);
             if (!installCheck.ok) throw new Error(installCheck.error);
-            const settings = buildWan2gpSettings(model, params, { imageStart: imagePath });
+            const settings = buildWan2gpSettings(model, params, { imageStart: imagePath, audioStart: audioPath });
             const { child, done } = local.runGeneration({ install, settings, runDir, onProgress: send });
             run.cancel = () => local.killTree(child);
             const mediaPath = await done.catch((err) => {
@@ -197,6 +198,7 @@ async function generate(params, mainWindow) {
             return mediaResult(mediaPath, settings.seed);
         }
 
+        if (model.needsAudio) throw new Error(`${model.name} needs a local Wan2GP folder: audio files cannot be sent to a remote server yet.`);
         const client = mcpClientFor(cfg.url);
         const abort = new AbortController();
         let jobId = null;

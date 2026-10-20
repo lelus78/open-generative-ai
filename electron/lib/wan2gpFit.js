@@ -12,6 +12,7 @@ const REQUIREMENTS = {
     't2v_1.3B':            { minVramGB: 6,  comfortVramGB: 8,  minRamGB: 16, downloadGB: 10 },
     t2v_fusionix:          { minVramGB: 10, comfortVramGB: 16, minRamGB: 32, downloadGB: 20 },
     i2v_fusionix:          { minVramGB: 10, comfortVramGB: 16, minRamGB: 32, downloadGB: 20 },
+    infinitetalk:          { minVramGB: 12, comfortVramGB: 20, minRamGB: 48, downloadGB: 22 },
     t2v_2_2:               { minVramGB: 12, comfortVramGB: 24, minRamGB: 48, downloadGB: 30 },
     i2v_2_2:               { minVramGB: 12, comfortVramGB: 24, minRamGB: 48, downloadGB: 30 },
     hunyuan_1_5_t2v:       { minVramGB: 12, comfortVramGB: 20, minRamGB: 32, downloadGB: 16 },
