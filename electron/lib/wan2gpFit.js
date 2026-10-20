@@ -14,6 +14,10 @@ const REQUIREMENTS = {
     i2v_fusionix:          { minVramGB: 10, comfortVramGB: 16, minRamGB: 32, downloadGB: 20 },
     t2v_2_2:               { minVramGB: 12, comfortVramGB: 24, minRamGB: 48, downloadGB: 30 },
     i2v_2_2:               { minVramGB: 12, comfortVramGB: 24, minRamGB: 48, downloadGB: 30 },
+    hunyuan_1_5_t2v:       { minVramGB: 12, comfortVramGB: 20, minRamGB: 32, downloadGB: 16 },
+    hunyuan_1_5_480_i2v_step_distilled: { minVramGB: 10, comfortVramGB: 16, minRamGB: 32, downloadGB: 16 },
+    qwen_image_21_turbo_7B: { minVramGB: 8, comfortVramGB: 12, minRamGB: 24, downloadGB: 17 },
+    qwen_image_21_7B:      { minVramGB: 8, comfortVramGB: 12, minRamGB: 24, downloadGB: 17 },
     hunyuan_1_5_480_t2v:   { minVramGB: 10, comfortVramGB: 16, minRamGB: 32, downloadGB: 16 },
     ltx2_22B_distilled:    { minVramGB: 16, comfortVramGB: 24, minRamGB: 48, downloadGB: 35 },
 };
