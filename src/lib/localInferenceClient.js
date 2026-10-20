@@ -14,6 +14,10 @@ class LocalInferenceClient {
         if (!isLocalAIAvailable()) return { exists: false };
         return window.localAI.getBinaryStatus();
     }
+    async pickStorageFolder() {
+        if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
+        return window.localAI.pickStorageFolder();
+    }
     async downloadBinary() {
         if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
         return window.localAI.downloadBinary();

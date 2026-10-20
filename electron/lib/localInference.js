@@ -1,4 +1,4 @@
-const { ipcMain, app, BrowserWindow } = require('electron');
+const { ipcMain, app, BrowserWindow, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
@@ -17,6 +17,7 @@ const {
 const {
     LOCAL_AI_DIR_ENV,
     resolveLocalAiPaths,
+    writeStoredLocalAiDir,
 } = require('./localInferencePaths');
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
@@ -24,8 +25,8 @@ const {
 // never crashes the process before a window exists — see #232.
 let DATA_DIR, BIN_DIR, MODELS_DIR, TMP_DIR;
 
-function ensureLocalAiPaths() {
-    if (BIN_DIR) return;
+function ensureLocalAiPaths({ force = false } = {}) {
+    if (BIN_DIR && !force) return;
     const resolved = resolveLocalAiPaths({ userDataPath: app.getPath('userData') });
     DATA_DIR = resolved.dataDir;
     BIN_DIR = resolved.binDir;
@@ -43,7 +44,7 @@ let BINARY_PATH;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let activeProcess = null;
-const activeDownloads = new Map(); // modelId → request object
+let cancelRequested = false;
 
 // ─── GitHub release asset matcher per platform ───────────────────────────────
 // Asset names look like: sd-master-44cca3d-bin-Darwin-macOS-15.7.4-arm64.zip
@@ -68,7 +69,19 @@ function fetchJson(url) {
 }
 
 // ─── Robust HTTPS download with redirect-following, range-resume, and retry ───
+// Two concurrent downloads of the same file would both append to the same .part
+// and silently corrupt it, so callers share one in-flight download per destination.
+const inflightDownloads = new Map();
 function downloadFile(url, destPath, onProgress) {
+    const existing = inflightDownloads.get(destPath);
+    if (existing) return existing;
+    const promise = downloadFileUnguarded(url, destPath, onProgress)
+        .finally(() => inflightDownloads.delete(destPath));
+    inflightDownloads.set(destPath, promise);
+    return promise;
+}
+
+function downloadFileUnguarded(url, destPath, onProgress) {
     const tmp = destPath + '.part';
 
     // Outer total so progress never goes backwards across retries/redirects
@@ -95,7 +108,7 @@ function downloadFile(url, destPath, onProgress) {
             if ([301, 302, 303, 307, 308].includes(statusCode)) {
                 res.resume();
                 if (redirectsLeft <= 0) { reject(new Error('Too many redirects')); return; }
-                resolve(attempt(headers.location, redirectsLeft - 1, retriesLeft));
+                resolve(attempt(new URL(headers.location, requestUrl).href, redirectsLeft - 1, retriesLeft));
                 return;
             }
 
@@ -125,7 +138,16 @@ function downloadFile(url, destPath, onProgress) {
                 if (knownTotal && onProgress) onProgress(received / knownTotal);
             });
             res.pipe(out);
-            out.on('finish', () => { fs.renameSync(tmp, destPath); resolve(); });
+            out.on('finish', () => {
+                // A truncated or doubled file would load fine and then produce garbage images
+                if (knownTotal && fs.statSync(tmp).size !== knownTotal) {
+                    fs.unlinkSync(tmp);
+                    reject(new Error('Downloaded file size does not match the server — please retry'));
+                    return;
+                }
+                fs.renameSync(tmp, destPath);
+                resolve();
+            });
             out.on('error', reject);
             res.on('error', reject);
         });
@@ -221,7 +243,73 @@ async function getBinaryStatus() {
         dataDir: DATA_DIR,
         modelsDir: MODELS_DIR,
         envVar: LOCAL_AI_DIR_ENV,
+        envOverride: !!(process.env[LOCAL_AI_DIR_ENV] || '').trim(),
     };
+}
+
+// ─── Storage location (chosen from the UI) ───────────────────────────────────
+async function pickStorageFolder(mainWindow) {
+    if ((process.env[LOCAL_AI_DIR_ENV] || '').trim()) {
+        throw new Error(`The location is fixed by the ${LOCAL_AI_DIR_ENV} environment variable — remove it to change the folder from here.`);
+    }
+    if (activeProcess || inflightDownloads.size) {
+        throw new Error('Wait for the running generation or download to finish before changing the folder.');
+    }
+
+    const res = await dialog.showOpenDialog(mainWindow, {
+        title: 'Choose where to store engine and models',
+        defaultPath: DATA_DIR,
+        properties: ['openDirectory', 'createDirectory'],
+    });
+    if (res.canceled || !res.filePaths[0]) return null;
+
+    const target = path.resolve(res.filePaths[0]);
+    if (target === path.resolve(DATA_DIR)) return getBinaryStatus();
+    // Never nest the store inside the old one: the move would copy a folder into itself.
+    if (target.toLowerCase().startsWith(path.resolve(DATA_DIR).toLowerCase() + path.sep)) {
+        throw new Error('Choose a folder outside the current storage folder.');
+    }
+
+    const oldDir = DATA_DIR;
+    const hasFiles = fs.existsSync(MODELS_DIR) && fs.readdirSync(MODELS_DIR).length > 0;
+    let move = false;
+    if (hasFiles) {
+        const { response } = await dialog.showMessageBox(mainWindow, {
+            type: 'question',
+            title: 'Existing models',
+            message: 'Move the existing engine and models to the new folder?',
+            detail: `From: ${oldDir}
+To: ${target}
+
+Moving large models can take a few minutes.`,
+            buttons: ['Move files', 'Use new folder (leave files)', 'Cancel'],
+            defaultId: 0,
+            cancelId: 2,
+        });
+        if (response === 2) return null;
+        move = response === 0;
+    }
+
+    if (move) {
+        for (const sub of ['bin', 'models']) {
+            const from = path.join(oldDir, sub);
+            if (!fs.existsSync(from)) continue;
+            const to = path.join(target, sub);
+            fs.mkdirSync(to, { recursive: true });
+            fs.cpSync(from, to, { recursive: true, force: true });
+        }
+    }
+
+    writeStoredLocalAiDir(app.getPath('userData'), target);
+    ensureLocalAiPaths({ force: true });
+
+    if (move) {
+        // Remove the old copy only after the new one is in place and the config is saved.
+        for (const sub of ['bin', 'models']) {
+            fs.rmSync(path.join(oldDir, sub), { recursive: true, force: true });
+        }
+    }
+    return getBinaryStatus();
 }
 
 // Metal-enabled binaries hosted on our own release (macOS arm64 only).
@@ -427,6 +515,7 @@ async function generate(params, mainWindow) {
     const { LOCAL_MODEL_CATALOG, ZIMAGE_AUXILIARY } = require('./modelCatalog');
     const send = (data) => mainWindow?.webContents.send('local-ai:progress', data);
 
+    if (activeProcess) throw new Error('A generation is already running — wait for it to finish or cancel it.');
     ensureBundledBinaryInstalled();
     if (!fs.existsSync(BINARY_PATH)) throw new Error('sd.cpp binary not installed. Download it in Settings > Local Models.');
 
@@ -517,6 +606,7 @@ async function generate(params, mainWindow) {
         console.log('[sd-cli] command:', BINARY_PATH, args.join(' '));
         // DYLD_LIBRARY_PATH lets macOS find libstable-diffusion.dylib next to sd-cli
         const spawnEnv = { ...process.env, DYLD_LIBRARY_PATH: BIN_DIR, LD_LIBRARY_PATH: BIN_DIR };
+        cancelRequested = false;
         activeProcess = spawn(BINARY_PATH, args, { env: spawnEnv });
         const progressState = { tail: '', lastStep: 0, lastTotalSteps: 0 };
         const outputLines = [];
@@ -540,6 +630,10 @@ async function generate(params, mainWindow) {
             activeProcess = null;
             const allOutput = outputLines.filter(l => l.trim()).join('\n');
             console.error('[sd-cli] full output:\n' + allOutput);
+            if (cancelRequested) {
+                reject(new Error('Generation cancelled'));
+                return;
+            }
             if (code !== 0) {
                 const tail = outputLines.filter(l => l.trim()).slice(-20).join('\n');
                 const killed = code === null;
@@ -574,6 +668,7 @@ async function generate(params, mainWindow) {
 
 function cancelGeneration() {
     if (activeProcess) {
+        cancelRequested = true;
         activeProcess.kill('SIGTERM');
         activeProcess = null;
     }
@@ -588,6 +683,7 @@ function getMainWindow() {
 function register() {
     ensureLocalAiPaths();
     ipcMain.handle('local-ai:binary-status', () => getBinaryStatus());
+    ipcMain.handle('local-ai:pick-storage', () => pickStorageFolder(getMainWindow()));
     ipcMain.handle('local-ai:download-binary', () => downloadBinary(getMainWindow()));
     ipcMain.handle('local-ai:list-models', () => listModels());
     ipcMain.handle('local-ai:download-model', (_, modelId) => downloadModel(modelId, getMainWindow()));

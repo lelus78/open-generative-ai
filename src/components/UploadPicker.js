@@ -319,8 +319,8 @@ export function createUploadPicker({ anchorContainer, onSelect, onClear, maxImag
     window.addEventListener('click', closePanel);
 
     // ── File upload handler ───────────────────────────────────────────────────
-    fileInput.onchange = async (e) => {
-        const files = Array.from(e.target.files);
+    const handleFiles = async (files) => {
+        files = files.filter(f => f.type.startsWith('image/'));
         if (!files.length) return;
 
         if (needsKey()) {
@@ -378,7 +378,10 @@ export function createUploadPicker({ anchorContainer, onSelect, onClear, maxImag
             updateTrigger();
             alert(`Image upload failed: ${err.message}`);
         }
+    };
 
+    fileInput.onchange = async (e) => {
+        await handleFiles(Array.from(e.target.files));
         fileInput.value = '';
     };
 
@@ -411,5 +414,5 @@ export function createUploadPicker({ anchorContainer, onSelect, onClear, maxImag
         fireOnSelect();
     };
 
-    return { trigger, panel, reset, setMaxImages, getSelectedUrls, setImage };
+    return { trigger, panel, reset, setMaxImages, getSelectedUrls, setImage, addFiles: handleFiles };
 }

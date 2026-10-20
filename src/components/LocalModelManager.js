@@ -406,7 +406,10 @@ export function LocalModelManager() {
     modelsSection.innerHTML = `
         <div class="flex items-center justify-between gap-3">
             <h3 class="text-xs font-bold text-secondary uppercase tracking-wider shrink-0">${t('localModels.title')}</h3>
-            <span id="local-model-storage" class="min-w-0 truncate text-right text-[10px] text-muted">${t('localModels.checkingStorage')}</span>
+            <div class="flex min-w-0 items-center gap-2">
+                <span id="local-model-storage" class="min-w-0 truncate text-right text-[10px] text-muted">${t('localModels.checkingStorage')}</span>
+                <button id="local-model-change-folder" class="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-white/5 transition-colors">${t('localModels.changeFolder')}</button>
+            </div>
         </div>
         <div id="local-model-list" class="flex flex-col gap-3"></div>
     `;
@@ -414,14 +417,18 @@ export function LocalModelManager() {
 
     const listEl = modelsSection.querySelector('#local-model-list');
     const storageEl = modelsSection.querySelector('#local-model-storage');
+    const changeFolderBtn = modelsSection.querySelector('#local-model-change-folder');
 
     const refreshStorageInfo = async () => {
         try {
             const status = await localAI.getBinaryStatus();
             const storagePath = status.modelsDir || status.dataDir;
             storageEl.textContent = storagePath ? `${t('localModels.storedIn')} ${storagePath}` : t('localModels.storedDefault');
-            if (storagePath && status.envVar) {
-                storageEl.title = `Set ${status.envVar} before launch to change this location`;
+            storageEl.title = storagePath || '';
+            if (status.envOverride) {
+                changeFolderBtn.disabled = true;
+                changeFolderBtn.classList.add('opacity-40', 'cursor-not-allowed');
+                changeFolderBtn.title = `Location is fixed by the ${status.envVar} environment variable`;
             }
         } catch (_) {
             storageEl.textContent = t('localModels.storedDefault');
@@ -438,6 +445,21 @@ export function LocalModelManager() {
             });
         } catch (err) {
             listEl.innerHTML = `<div class="text-xs text-red-400 text-center py-4">${t('localModels.errorLoading')}${err.message}</div>`;
+        }
+    };
+
+    changeFolderBtn.onclick = async () => {
+        const label = changeFolderBtn.textContent;
+        changeFolderBtn.disabled = true;
+        changeFolderBtn.textContent = t('localModels.movingFolder');
+        try {
+            const status = await localAI.pickStorageFolder();
+            if (status) { await refreshStorageInfo(); await renderModels(); }
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            changeFolderBtn.textContent = label;
+            changeFolderBtn.disabled = false;
         }
     };
 
