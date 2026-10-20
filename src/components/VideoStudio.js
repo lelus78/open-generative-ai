@@ -5,6 +5,7 @@ import { t, tf } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
+import { fitBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -715,7 +716,7 @@ export function VideoStudio() {
                     <div class="flex items-center gap-3.5 min-w-0">
                          <div class="w-10 h-10 shrink-0 ${iconColor} border border-white/5 rounded-xl flex items-center justify-center font-black text-sm shadow-inner uppercase">${m.provider === 'wan2gp' ? '⚡' : m.name.charAt(0)}</div>
                          <div class="flex flex-col gap-0.5 min-w-0">
-                            <span class="text-xs font-bold text-white tracking-tight">${m.name}</span>
+                            <span class="text-xs font-bold text-white tracking-tight">${m.name} ${local ? fitBadgeHtml(local) : ''}</span>
                             ${m.provider === 'wan2gp' && m.description ? `<span class="text-[10px] text-muted leading-snug">${escapeHtml(m.description)}</span>` : ''}
                             ${isV2V ? `<span class="text-[9px] text-orange-400/70">${m.imageField ? 'Upload a video and image' : 'Upload a video to use'}</span>` : ''}
                             ${localNote}
@@ -773,7 +774,9 @@ export function VideoStudio() {
                 const lf = filter.toLowerCase();
 
                 // Regular generation models (always t2v or i2v, never v2v)
-                const generationModels = imageMode ? i2vList() : t2vList();
+                const generationModels = useLocalModel
+                    ? sortByFit(imageMode ? i2vList() : t2vList(), m => localAvailability.get(m.id))
+                    : (imageMode ? i2vList() : t2vList());
                 const filteredMain = generationModels
                     .filter(m => m.name.toLowerCase().includes(lf) || m.id.toLowerCase().includes(lf));
                 filteredMain.forEach(m => list.appendChild(makeModelItem(m, false)));
@@ -1273,6 +1276,10 @@ export function VideoStudio() {
             const status = localAvailability.get(selectedModel);
             if (status && !status.ready) {
                 showLocalError(status.unavailableReason);
+                return;
+            }
+            // Never start a multi-GB download without asking first.
+            if (status?.needsDownload && !confirm(tf('fit.confirmDownload', selectedModelName, status.downloadGB ?? '?'))) {
                 return;
             }
         } else {

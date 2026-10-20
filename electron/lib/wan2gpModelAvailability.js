@@ -6,17 +6,33 @@
 //   both:   'available' | 'missing' | 'installed'; anything else means the model is unknown
 // Weights that are not on disk yet are still usable — Wan2GP downloads them on
 // first use — so that case is ready with a note, not unavailable.
+const { rateFit } = require('./wan2gpFit');
+
 function withWan2gpAvailability(model, engine) {
     if (!engine?.ok) {
         return { ...model, ready: false, unavailableReason: engine?.error || 'Wan2GP is not configured' };
     }
 
     const status = engine.modelStatus?.get(model.modelType);
+    const needsDownload = status === 'missing';
+
+    // Hardware fit only applies to a local engine: a remote server has its own GPU.
+    const rated = engine.mode === 'local' && engine.hardware && (status === 'installed' || status === 'available' || status === 'missing')
+        ? rateFit(model.modelType, engine.hardware, { needsDownload })
+        : null;
+    if (rated?.fit === 'unfit') {
+        return { ...model, ready: false, fit: 'unfit', unavailableReason: rated.reason, downloadGB: rated.downloadGB };
+    }
+    const fitInfo = rated && rated.fit !== 'unknown'
+        ? { fit: rated.fit, fitReason: rated.reason, downloadGB: rated.downloadGB }
+        : {};
+
     if (status === 'installed' || status === 'available') {
-        return { ...model, ready: true };
+        return { ...model, ready: true, ...fitInfo };
     }
     if (status === 'missing') {
-        return { ...model, ready: true, availabilityNote: 'Weights not downloaded yet — the first run downloads them (several GB).' };
+        const size = rated?.downloadGB ? `~${rated.downloadGB} GB` : 'several GB';
+        return { ...model, ready: true, ...fitInfo, needsDownload: true, availabilityNote: `Not downloaded yet — the first run downloads ${size}.` };
     }
 
     const where = engine.mode === 'remote' ? 'The Wan2GP server' : 'This Wan2GP install';

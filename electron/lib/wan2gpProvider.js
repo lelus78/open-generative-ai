@@ -18,6 +18,7 @@ const { resolveLocalAiPaths } = require('./localInferencePaths');
 const { withWan2gpAvailability } = require('./wan2gpModelAvailability');
 const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('./wan2gpCatalog');
 const local = require('./wan2gpLocal');
+const { getHardwareProfile } = require('./hardwareProfile');
 const { createMcpClient, normalizeMcpUrl } = require('./wan2gpMcp');
 
 const CONFIG_DIR = path.join(app.getPath('userData'), 'local-ai');
@@ -110,6 +111,10 @@ async function engineStatus(cfg = readConfig()) {
 
 async function listModels() {
     const engine = await engineStatus();
+    if (engine.ok && engine.mode === 'local') {
+        const install = local.resolveInstall(readConfig());
+        engine.hardware = await getHardwareProfile(install?.ckptsDir);
+    }
     return WAN2GP_CATALOG.map(m => withWan2gpAvailability(m, engine));
 }
 
@@ -261,6 +266,10 @@ function register() {
             send({ phase: 'error', error: err.message });
             throw err;
         }
+    });
+    ipcMain.handle('local-ai:hardware', async () => {
+        const install = local.resolveInstall(readConfig());
+        return getHardwareProfile(install?.ckptsDir || app.getPath('userData'));
     });
     ipcMain.handle('wan2gp:check', (_, cfg) => check({ ...readConfig(), ...cfg }));
     ipcMain.handle('wan2gp:probe', (_, url) => probeRemote(url));

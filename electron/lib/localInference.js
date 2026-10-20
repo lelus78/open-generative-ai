@@ -4,6 +4,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
+const { getHardwareProfile } = require('./hardwareProfile');
 const {
     getBundledBinaryResourceDir,
     pickBinaryAssetForPlatform,
@@ -427,16 +428,33 @@ function getAuxState(aux) {
 
 async function listModels() {
     const { LOCAL_MODEL_CATALOG, ZIMAGE_AUXILIARY } = require('./modelCatalog');
+    const { rateAgainst, sdRequirements } = require('./wan2gpFit');
+    const hardware = await getHardwareProfile(MODELS_DIR);
     const auxStatus = {
         llm: getAuxState(ZIMAGE_AUXILIARY.llm),
         vae: getAuxState(ZIMAGE_AUXILIARY.vae),
     };
-    return LOCAL_MODEL_CATALOG.map(m => ({
-        ...m,
-        state: getModelState(m),
-        path: path.join(MODELS_DIR, m.filename),
-        ...(m.requiresAuxiliary ? { auxiliaryStatus: auxStatus } : {}),
-    }));
+    return LOCAL_MODEL_CATALOG.map(m => {
+        const state = getModelState(m);
+        // Size of everything this model still has to download (main file + missing components).
+        const auxList = m.requiresAuxiliary ? [ZIMAGE_AUXILIARY.llm, ZIMAGE_AUXILIARY.vae] : [];
+        const auxGB = auxList.reduce((sum, a) => sum + (a.sizeGB || 0), 0);
+        const missingGB = (state === 'downloaded' ? 0 : (m.sizeGB || 0))
+            + auxList.filter(a => getAuxState(a) !== 'downloaded').reduce((sum, a) => sum + (a.sizeGB || 0), 0);
+        // Without an NVIDIA GPU (Apple Silicon, AMD, CPU-only) sd.cpp still runs, so do not judge.
+        const rated = hardware.vramGB === null
+            ? { fit: 'unknown', reason: '', downloadGB: null }
+            : rateAgainst(sdRequirements(m, auxGB, missingGB), hardware, missingGB > 0);
+        return {
+            ...m,
+            state,
+            path: path.join(MODELS_DIR, m.filename),
+            ...(m.requiresAuxiliary ? { auxiliaryStatus: auxStatus } : {}),
+            fit: rated.fit,
+            fitReason: rated.reason,
+            downloadGB: rated.downloadGB,
+        };
+    });
 }
 
 async function downloadModel(modelId, mainWindow) {

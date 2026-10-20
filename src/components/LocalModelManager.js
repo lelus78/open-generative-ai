@@ -1,5 +1,6 @@
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { t, tf } from '../lib/i18n.js';
+import { fitBadgeHtml, sortByFit, hardwareSummary } from '../lib/fitBadge.js';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const DownloadIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
@@ -290,8 +291,10 @@ function Wan2gpModelCard(model) {
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-sm font-bold text-white truncate">${model.name}</span>
                 ${ready ? `<span class="text-green-400">${CheckIcon}</span>` : ''}
+                ${fitBadgeHtml(model)}
             </div>
             <p class="text-[11px] text-muted leading-relaxed">${model.description}</p>
+            ${ready && model.fit === 'heavy' ? `<p class="text-[10px] text-yellow-400/80 leading-relaxed">${escapeHtml(model.fitReason)}</p>` : ''}
             ${!ready && model.unavailableReason ? `<p class="text-[10px] text-yellow-400/80 leading-relaxed">${escapeHtml(model.unavailableReason)}</p>` : ''}
             ${ready && model.availabilityNote ? `<p class="text-[10px] text-muted leading-relaxed">${escapeHtml(model.availabilityNote)}</p>` : ''}
             <div class="flex items-center gap-1.5 flex-wrap mt-1">
@@ -324,8 +327,11 @@ function ModelCard(model, onStateChange) {
                     <span class="text-sm font-bold text-white truncate">${model.name}</span>
                     ${model.featured ? `<span class="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-primary/20 text-primary border border-primary/30">${t('localModels.featured')}</span>` : ''}
                     ${fullyReady ? `<span class="text-green-400">${CheckIcon}</span>` : ''}
+                    ${fitBadgeHtml(model)}
                 </div>
                 <p class="text-[11px] text-muted leading-relaxed">${model.description}</p>
+                ${model.fit === 'unfit' && !fullyReady ? `<p class="text-[10px] text-red-400/80 leading-relaxed">${escapeHtml(model.fitReason)}</p>` : ''}
+                ${model.fit === 'heavy' ? `<p class="text-[10px] text-yellow-400/80 leading-relaxed">${escapeHtml(model.fitReason)}</p>` : ''}
                 <div class="flex items-center gap-1.5 flex-wrap mt-1">
                     <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-primary/10 text-primary">${model.type.toUpperCase()}</span>
                     <span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-white/5 text-muted">${fmtGB(model.sizeGB)}</span>
@@ -362,7 +368,11 @@ function ModelCard(model, onStateChange) {
     const progressText = card.querySelector('.progress-text');
 
     const downloadBtn = card.querySelector('.download-btn');
-    if (downloadBtn) {
+    if (downloadBtn && model.fit === 'unfit') {
+        downloadBtn.disabled = true;
+        downloadBtn.classList.add('opacity-40', 'cursor-not-allowed');
+        downloadBtn.title = model.fitReason || '';
+    } else if (downloadBtn) {
         downloadBtn.onclick = async () => {
             downloadBtn.disabled = true;
             downloadBtn.innerHTML = `<span class="animate-spin">◌</span> ${t('localModels.starting')}`;
@@ -438,12 +448,14 @@ export function LocalModelManager() {
                 <button id="local-model-change-folder" class="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-white/5 transition-colors">${t('localModels.changeFolder')}</button>
             </div>
         </div>
+        <div id="local-model-hw" class="text-[10px] text-muted"></div>
         <div id="local-model-list" class="flex flex-col gap-3"></div>
     `;
     root.appendChild(modelsSection);
 
     const listEl = modelsSection.querySelector('#local-model-list');
     const storageEl = modelsSection.querySelector('#local-model-storage');
+    const hwEl = modelsSection.querySelector('#local-model-hw');
     const changeFolderBtn = modelsSection.querySelector('#local-model-change-folder');
 
     const refreshStorageInfo = async () => {
@@ -465,8 +477,9 @@ export function LocalModelManager() {
     const renderModels = async () => {
         listEl.innerHTML = `<div class="text-xs text-muted text-center py-4">${t('localModels.loading')}</div>`;
         try {
-            const models = await localAI.listModels();
+            const models = sortByFit(await localAI.listModels());
             listEl.innerHTML = '';
+            localAI.getHardware().then(hw => { if (hw) hwEl.textContent = `${t('fit.yourPc')} ${hardwareSummary(hw)}`; });
             models.forEach(m => {
                 listEl.appendChild(ModelCard(m, renderModels));
             });

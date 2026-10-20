@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('localAI', {
 
     // ── sd.cpp engine ──────────────────────────────────────────────────────
     getBinaryStatus: () => ipcRenderer.invoke('local-ai:binary-status'),
+    getHardware: () => ipcRenderer.invoke('local-ai:hardware'),
     pickStorageFolder: () => ipcRenderer.invoke('local-ai:pick-storage'),
     downloadBinary: () => ipcRenderer.invoke('local-ai:download-binary'),
 

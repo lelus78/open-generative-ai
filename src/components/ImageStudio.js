@@ -10,6 +10,7 @@ import { ENHANCE_TAGS, QUICK_PROMPTS } from '../lib/promptUtils.js';
 import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
+import { fitBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
 import { appendGenerationRefundNotice } from '../../packages/studio/src/utils/generationLifecycle.js';
@@ -43,6 +44,7 @@ export function ImageStudio() {
     // Wan2GP video models (type='video') are hidden from ImageStudio.
     const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video');
     let useLocalModel = false;
+    let localFitInfo = new Map(); // id → fit/readiness reported by the desktop app
     let selectedLocalModel = LOCAL_IMAGE_MODELS[0]?.id || null;
     try {
         const savedLocal = localStorage.getItem('image_local_model');
@@ -804,17 +806,19 @@ export function ImageStudio() {
 
                 if (useLocalModel) {
                     // ── Local model list (Wan2GP image-capable models only) ───
-                    const filtered = LOCAL_IMAGE_MODELS.filter(m =>
+                    const filtered = sortByFit(LOCAL_IMAGE_MODELS.filter(m =>
                         m.name.toLowerCase().includes(filter.toLowerCase()) ||
                         m.id.toLowerCase().includes(filter.toLowerCase())
-                    );
+                    ), m => localFitInfo.get(m.id));
                     if (filtered.length === 0) {
                         list.innerHTML = `<div class="text-xs text-muted text-center py-4">${t('common.noResults')}</div>`;
                         return;
                     }
                     filtered.forEach(m => {
                         const item = document.createElement('div');
-                        item.className = `flex items-center justify-between p-3.5 hover:bg-white/5 rounded-2xl cursor-pointer transition-all border border-transparent hover:border-white/5 ${selectedLocalModel === m.id ? 'bg-white/5 border-white/5' : ''}`;
+                        const info = localFitInfo.get(m.id);
+                        const blocked = info?.fit === 'unfit' || info?.ready === false;
+                        item.className = `flex items-center justify-between p-3.5 rounded-2xl transition-all border border-transparent ${blocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5 cursor-pointer hover:border-white/5'} ${selectedLocalModel === m.id ? 'bg-white/5 border-white/5' : ''}`;
                         item.innerHTML = `
                             <div class="flex items-center gap-3.5">
                                 <div class="w-10 h-10 ${m.featured ? 'bg-primary/10 text-primary' : 'bg-green-500/10 text-green-400'} border border-white/5 rounded-xl flex items-center justify-center font-black text-sm shadow-inner uppercase">${m.featured ? '⚡' : m.name.charAt(0)}</div>
@@ -822,14 +826,17 @@ export function ImageStudio() {
                                     <div class="flex items-center gap-1.5">
                                         <span class="text-xs font-bold text-white tracking-tight">${m.name}</span>
                                         ${m.featured ? '<span class="text-[9px] font-black px-1 py-0.5 rounded bg-primary/20 text-primary">FEATURED</span>' : ''}
+                                        ${fitBadgeHtml(info)}
                                     </div>
                                     <span class="text-[10px] text-muted">${m.type.toUpperCase()} · ${m.family}</span>
+                                    ${blocked ? `<span class="text-[9px] text-yellow-400/80 leading-snug">${(info.unavailableReason || info.fitReason || '').replace(/[<>&]/g, '')}</span>` : ''}
                                 </div>
                             </div>
                             ${selectedLocalModel === m.id ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                         `;
                         item.onclick = (e) => {
                             e.stopPropagation();
+                            if (blocked) return;
                             selectedLocalModel = m.id;
                             try { localStorage.setItem('image_local_model', m.id); } catch { /* storage unavailable */ }
                             document.getElementById('model-btn-label').textContent = m.name;
@@ -889,6 +896,9 @@ export function ImageStudio() {
             const searchInput = dropdown.querySelector('#model-search');
             searchInput.onclick = (e) => e.stopPropagation();
             searchInput.oninput = (e) => renderModels(e.target.value);
+            if (useLocalModel) {
+                loadFitInfo().then(map => { localFitInfo = map; if (dropdownOpen === 'model') renderModels(searchInput.value); });
+            }
 
         } else if (type === 'ar') {
             dropdown.classList.add('max-w-[240px]');
