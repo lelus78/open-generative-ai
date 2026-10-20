@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
@@ -1118,6 +1118,7 @@ export function VideoStudio() {
         renderHistory();
         if (resultVideo.src === entry.url) newPromptBtn.click();
     };
+    attachResultMenu(resultVideo, [regenerateBtn, downloadBtn, deleteBtn, newPromptBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultVideo.src);
         if (entry) deleteEntry(entry);

@@ -2,7 +2,7 @@
 // Cards show the prompt, the model, how long ago and where it ran; the panel can be searched,
 // collapsed to a thumbnail strip, and every result can be reused, downloaded or deleted.
 import { t, tf, getLang } from '../lib/i18n.js';
-import { TRASH_ICON } from '../lib/studioHelpers.js';
+import { TRASH_ICON, showPopupMenu, copyImageToClipboard } from '../lib/studioHelpers.js';
 
 const COLLAPSED_KEY = 'history_panel_collapsed';
 const EXPANDED_PADDING = '20rem';   // room left in the studio so the prompt bar is not covered
@@ -159,6 +159,14 @@ export function createHistoryPanel(options) {
         card.appendChild(actions);
 
         card.onclick = () => { onOpen(entry); render(); };
+        card.oncontextmenu = (e) => showPopupMenu(e, [
+            { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
+            ...(onReuse && prompt ? [{ label: t('history.reuse'), onClick: () => onReuse(entry) }] : []),
+            ...(mediaType === 'image' ? [{ label: t('common.copy'), onClick: () => copyImageToClipboard(entry.url).catch(err => console.error('[history] Copy failed:', err)) }] : []),
+            { label: t('common.download'), onClick: () => onDownload(entry) },
+            'separator',
+            { label: t('common.delete'), danger: true, onClick: () => onDelete(entry) },
+        ]);
         return card;
     };
 
@@ -169,6 +177,12 @@ export function createHistoryPanel(options) {
         thumb.title = entry.prompt || entry.settings?.prompt || '';
         thumb.innerHTML = mediaHtml(entry);
         thumb.onclick = () => { onOpen(entry); render(); };
+        thumb.oncontextmenu = (e) => showPopupMenu(e, [
+            { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
+            { label: t('common.download'), onClick: () => onDownload(entry) },
+            'separator',
+            { label: t('common.delete'), danger: true, onClick: () => onDelete(entry) },
+        ]);
         return thumb;
     };
 

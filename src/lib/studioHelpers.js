@@ -164,3 +164,71 @@ export async function clearHistoryEntries(entries, storageKey, max) {
     entries.length = 0;
     saveHistory(storageKey, entries, max);
 }
+
+let closePopup = null;
+
+/**
+ * Small HTML context menu at the pointer. `items`: { label, onClick, danger?, disabled? } or 'separator'.
+ * Calling preventDefault() on the event keeps the native menu from also appearing.
+ */
+export function showPopupMenu(event, items) {
+    event.preventDefault();
+    event.stopPropagation();
+    closePopup?.();
+
+    const menu = document.createElement('div');
+    menu.className = 'fixed z-[300] w-52 py-1 rounded-xl bg-[#1a1a1a] border border-white/10 shadow-2xl text-xs animate-fade-in';
+    items.forEach((item) => {
+        if (item === 'separator') {
+            const line = document.createElement('div');
+            line.className = 'my-1 h-px bg-white/10';
+            menu.appendChild(line);
+            return;
+        }
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.disabled = !!item.disabled;
+        row.className = `w-full text-left px-3 py-2 font-bold transition-colors ${item.disabled ? 'text-white/30 cursor-not-allowed' : item.danger ? 'text-red-400 hover:bg-red-500/10' : 'text-white hover:bg-white/10'}`;
+        row.textContent = item.label.replace(/^[^\p{L}]+/u, ''); // drop leading arrows/symbols used on the buttons
+        row.onclick = () => { close(); item.onClick?.(); };
+        menu.appendChild(row);
+    });
+    document.body.appendChild(menu);
+
+    // Keep the menu inside the window
+    const x = Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 8);
+    const y = Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 8);
+    menu.style.left = `${Math.max(8, x)}px`;
+    menu.style.top = `${Math.max(8, y)}px`;
+
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onOutside = (e) => { if (!menu.contains(e.target)) close(); };
+    function close() {
+        menu.remove();
+        document.removeEventListener('keydown', onKey, true);
+        document.removeEventListener('mousedown', onOutside, true);
+        window.removeEventListener('blur', close);
+        window.removeEventListener('resize', close);
+        closePopup = null;
+    }
+    closePopup = close;
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('mousedown', onOutside, true);
+    window.addEventListener('blur', close);
+    window.addEventListener('resize', close);
+}
+
+/**
+ * Right-click on a result (the image/video shown full screen): offers the same actions as its
+ * buttons. Labels come from the buttons themselves, minus any leading arrow/symbol.
+ */
+export function attachResultMenu(element, buttons) {
+    element.addEventListener('contextmenu', (e) => {
+        const items = buttons.filter(Boolean).map((button) => ({
+            label: button.textContent.replace(/^[^\p{L}]+/u, '').trim(),
+            danger: /text-red-/.test(button.className),
+            onClick: () => button.click(),
+        }));
+        showPopupMenu(e, items);
+    });
+}

@@ -7,7 +7,7 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
@@ -551,6 +551,7 @@ export function CinemaStudio() {
         renderHistory();
         if (resultImg.src === entry.url) resetToPrompt();
     };
+    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, deleteBtn, newPromptBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultImg.src);
         if (entry) deleteEntry(entry);

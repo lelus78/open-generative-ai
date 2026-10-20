@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -647,6 +647,7 @@ export function LipSyncStudio() {
         renderHistory();
         if (resultVideo.src === entry.url) newBtn.click();
     };
+    attachResultMenu(resultVideo, [regenerateBtn, downloadBtn, deleteBtn, newBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultVideo.src);
         if (entry) deleteEntry(entry);

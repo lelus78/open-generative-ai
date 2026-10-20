@@ -11,7 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
@@ -1101,6 +1101,7 @@ export function ImageStudio() {
         renderHistory();
         if (resultImg.src === entry.url) newPromptBtn.click();
     };
+    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, deleteBtn, newPromptBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultImg.src);
         if (entry) deleteEntry(entry);
