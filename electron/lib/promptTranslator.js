@@ -142,7 +142,21 @@ function extractArchive(archive, dest) {
  * }} options
  */
 function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsFile }) {
+    // Translations are kept on disk too (newest last, capped), so a prompt recovered from the history
+    // days later is not translated again.
+    const CACHE_LIMIT = 300;
+    const cacheFile = path.join(path.dirname(settingsFile), 'translation-cache.json');
     const cache = new Map();
+    try { for (const [k, v] of JSON.parse(fs.readFileSync(cacheFile, 'utf-8'))) cache.set(k, v); } catch { /* no cache yet */ }
+    const remember = (text, result) => {
+        cache.delete(text);
+        cache.set(text, result);
+        while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
+        try {
+            fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+            fs.writeFileSync(cacheFile, JSON.stringify([...cache]));
+        } catch { /* cache is optional */ }
+    };
     let enginePromise = null;
 
     const readSettings = () => {
@@ -199,7 +213,7 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
             const binary = await enginePromise;
             onStatus?.('Translating the prompt…');
             const result = (await runModel(binary, text)) || text;
-            cache.set(text, result);
+            remember(text, result);
             return result;
         } catch (err) {
             console.warn('[translate] skipped:', err.message);

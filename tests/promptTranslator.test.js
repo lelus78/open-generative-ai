@@ -57,3 +57,13 @@ test('pickAsset prefers the GPU build and falls back to the CPU one', () => {
     assert.equal(pickAsset(cpuOnly, 'win32-x64').name, 'llama-b1-bin-win-cpu-x64.zip');
     assert.equal(pickAsset(releases, 'plan9-x64'), null);
 });
+
+test('translations survive a restart (disk cache)', async () => {
+    const fs = require('fs'); const os = require('os'); const path = require('path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-'));
+    fs.writeFileSync(path.join(dir, 'translation-cache.json'), JSON.stringify([['una cavalletta su una staccionata', 'a grasshopper on a fence']]));
+    const { createPromptTranslator } = require('../electron/lib/promptTranslator');
+    const t = createPromptTranslator({ getPaths: () => ({ dataDir: dir, modelsDir: dir }), downloadFile: async () => {}, llmFilename: 'none.gguf', settingsFile: path.join(dir, 'settings.json') });
+    const r = await t.translateParams({ prompt: 'una cavalletta su una staccionata', seed: 7 });
+    assert.equal(r.params.prompt, 'a grasshopper on a fence');
+});
