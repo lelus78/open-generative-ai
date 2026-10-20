@@ -277,14 +277,14 @@ export function localProgressLabel({ status, step, totalSteps, downloadedBytes, 
  * Small button that switches local prompt translation on/off (same setting as Settings → Local Models).
  * Returns null outside Electron, where nothing is translated locally.
  */
-export function createTranslateToggle() {
+export function createTranslateToggle({ compact = false } = {}) {
     const api = window.localAI;
     if (!api?.getSettings) return null;
     const btn = document.createElement('button');
     btn.type = 'button';
     let enabled = true;
     const paint = () => {
-        btn.className = `flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-xs font-bold whitespace-nowrap ${enabled
+        btn.className = `flex items-center gap-1.5 ${compact ? 'px-3 py-1.5 rounded-md' : 'px-3 py-2 rounded-xl'} transition-all border text-xs font-bold whitespace-nowrap ${enabled
             ? 'bg-primary/20 border-primary/40 text-primary'
             : 'bg-white/5 border-white/5 text-white/50 hover:bg-white/10'}`;
         btn.textContent = enabled ? t('translate.on') : t('translate.off');

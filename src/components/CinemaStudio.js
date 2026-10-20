@@ -7,7 +7,7 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, createTranslateToggle, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
@@ -279,8 +279,6 @@ export function CinemaStudio() {
         updateLocalModelBtn();
         settingsToolbar.insertBefore(localModelBtn, settingsToolbar.firstChild);
         settingsToolbar.insertBefore(localToggleBtn, settingsToolbar.firstChild);
-        const translateBtn = createTranslateToggle();
-        if (translateBtn) localToggleBtn.after(translateBtn);
 
         // Reopen in the mode used last time (needs the container mounted, so wait for it).
         const restoreLastMode = (tries = 40) => {

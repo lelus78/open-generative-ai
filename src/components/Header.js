@@ -1,4 +1,5 @@
 import { SettingsModal } from './SettingsModal.js';
+import { createTranslateToggle } from '../lib/studioHelpers.js';
 import { t, getLang, setLang } from '../lib/i18n.js';
 
 export function Header(navigate) {
@@ -86,6 +87,8 @@ export function Header(navigate) {
     langBtn.textContent = currentLang === 'zh-CN' ? 'EN' : '中文';
     langBtn.onclick = () => setLang(currentLang === 'zh-CN' ? 'en' : 'zh-CN');
 
+    const translateBtn = createTranslateToggle({ compact: true });
+    if (translateBtn) rightPart.appendChild(translateBtn);
     rightPart.appendChild(langBtn);
     rightPart.appendChild(settingsBtn);
 
