@@ -7,7 +7,8 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
     const container = document.createElement('div');
@@ -543,18 +544,30 @@ export function LipSyncStudio() {
     // ==========================================
     const generationHistory = [];
 
-    const historySidebar = document.createElement('div');
-    historySidebar.className = 'fixed right-0 top-0 h-full w-20 md:w-24 bg-black/60 backdrop-blur-xl border-l border-white/5 z-50 flex flex-col items-center py-4 gap-3 overflow-y-auto transition-all duration-500 translate-x-full opacity-0';
-    historySidebar.id = 'lipsync-history-sidebar';
-
-    const historyLabel = document.createElement('div');
-    historyLabel.className = 'text-[9px] font-bold text-muted uppercase tracking-widest mb-2';
-    historyLabel.textContent = t('lipsync.history');
-    historySidebar.appendChild(historyLabel);
-
-    const historyList = document.createElement('div');
-    historyList.className = 'flex flex-col gap-2 w-full px-2';
-    historySidebar.appendChild(historyList);
+    const historyPanel = createHistoryPanel({
+        host: container,
+        mediaType: 'video',
+        entries: () => generationHistory,
+        getActiveUrl: () => resultVideo.src,
+        getModelLabel: (e) => {
+            const id = String(e.model || '');
+            return [...lipsyncModels, ...localModels].find(m => m.id === id)?.name || id.replace(/[-_]/g, ' ');
+        },
+        onOpen: (e) => showVideoInCanvas(e.url),
+        onDelete: (e) => deleteEntry(e),
+        onDownload: (e) => downloadFile(e.url, `lipsync-${e.id || 'clip'}.mp4`),
+        onReuse: (e) => {
+            newBtn.click();
+            textarea.value = e.prompt || '';
+            textarea.focus();
+        },
+        onClearAll: async () => {
+            await clearHistoryEntries(generationHistory, 'lipsync_history', 30);
+            renderHistory();
+            newBtn.click();
+        },
+    });
+    const historySidebar = historyPanel.element;
     container.appendChild(historySidebar);
 
     // Main canvas
@@ -640,31 +653,7 @@ export function LipSyncStudio() {
         else newBtn.click();
     };
 
-    const renderHistory = () => {
-        historyList.innerHTML = '';
-        generationHistory.forEach((entry, idx) => {
-            const thumb = document.createElement('div');
-            thumb.className = `relative group/thumb cursor-pointer rounded-xl overflow-hidden border-2 transition-all duration-300 ${idx === 0 ? 'border-primary shadow-glow' : 'border-white/10 hover:border-white/30'}`;
-            thumb.innerHTML = `
-                <video src="${entry.url}" preload="metadata" muted class="w-full aspect-square object-cover"></video>
-                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
-                    <button class="hist-delete p-1.5 bg-red-500 rounded-lg text-white hover:scale-110 transition-transform mr-1" title="${t('common.delete')}">${TRASH_ICON}</button>
-                    <button class="hist-download p-1.5 bg-primary rounded-lg text-black hover:scale-110 transition-transform" title="Download">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                    </button>
-                </div>
-            `;
-            thumb.onclick = (e) => {
-                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
-                if (e.target.closest('.hist-download')) { downloadFile(entry.url, `lipsync-${entry.id || idx}.mp4`); return; }
-                showVideoInCanvas(entry.url);
-                historyList.querySelectorAll('div').forEach(t => { t.classList.remove('border-primary', 'shadow-glow'); t.classList.add('border-white/10'); });
-                thumb.classList.remove('border-white/10');
-                thumb.classList.add('border-primary', 'shadow-glow');
-            };
-            historyList.appendChild(thumb);
-        });
-    };
+    const renderHistory = () => historyPanel.render();
 
     const downloadFile = async (url, filename) => {
         try {

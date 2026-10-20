@@ -155,3 +155,12 @@ export async function removeGenerationFile(entry) {
         await window.localAI.wan2gp.deleteOutput(entry.path);
     }
 }
+
+/** Empty a history: delete the files of local results, clear the array and persist the empty list. */
+export async function clearHistoryEntries(entries, storageKey, max) {
+    for (const entry of [...entries]) {
+        try { await removeGenerationFile(entry); } catch { /* already gone */ }
+    }
+    entries.length = 0;
+    saveHistory(storageKey, entries, max);
+}

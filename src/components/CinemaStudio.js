@@ -7,7 +7,8 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, clearHistoryEntries } from '../lib/studioHelpers.js';
+import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
     const container = document.createElement('div');
@@ -458,18 +459,37 @@ export function CinemaStudio() {
     const generationHistory = [];
 
     // History Sidebar - VISIBLE BY DEFAULT (removed translate-x-full opacity-0)
-    const historySidebar = document.createElement('div');
-    historySidebar.className = 'fixed right-0 top-0 h-full w-20 md:w-24 bg-black/60 backdrop-blur-xl border-l border-white/5 z-50 flex flex-col items-center py-4 gap-3 overflow-y-auto transition-all duration-500';
-
-    const historyLabel = document.createElement('div');
-    historyLabel.className = 'text-[9px] font-bold text-white/40 uppercase tracking-widest mb-2';
-    historyLabel.textContent = t('cinema.history');
-    historySidebar.appendChild(historyLabel);
-
-    const historyList = document.createElement('div');
-    historyList.className = 'flex flex-col gap-2 w-full px-2';
-    historySidebar.appendChild(historyList);
-
+    const historyPanel = createHistoryPanel({
+        host: container,
+        mediaType: 'image',
+        entries: () => generationHistory,
+        getActiveUrl: () => resultImg.src,
+        getModelLabel: (e) => {
+            const id = String(e.model || 'nano-banana-pro');
+            if (id.startsWith('local:')) return LOCAL_MODEL_CATALOG.find(m => m.id === id.slice(6))?.name || id.slice(6);
+            return 'Nano Banana Pro';
+        },
+        onOpen: (e) => loadHistoryItem(e), // restores prompt and camera settings too
+        onDelete: (e) => deleteEntry(e),
+        onDownload: async (e) => {
+            try {
+                const blobUrl = URL.createObjectURL(await (await fetch(e.url)).blob());
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = `cinema-shot-${e.timestamp || Date.now()}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+            } catch { window.open(e.url, '_blank'); }
+        },
+        onClearAll: async () => {
+            await clearHistoryEntries(generationHistory, 'cinema_history', 50);
+            renderHistory();
+            resetToPrompt();
+        },
+    });
+    const historySidebar = historyPanel.element;
     container.appendChild(historySidebar);
 
     // ==========================================
@@ -537,27 +557,7 @@ export function CinemaStudio() {
         else resetToPrompt();
     };
 
-    const renderHistory = () => {
-        historyList.innerHTML = '';
-        generationHistory.forEach((entry, idx) => {
-            const thumb = document.createElement('div');
-            thumb.className = `relative group/thumb cursor-pointer rounded-lg overflow-hidden border-2 transition-all duration-300 aspect-square ${idx === 0 ? 'border-[#22d3ee] shadow-glow-sm' : 'border-white/10 hover:border-white/30'}`;
-
-            thumb.innerHTML = `
-                <img src="${entry.url}" class="w-full h-full object-cover opacity-80 group-hover/thumb:opacity-100 transition-opacity">
-                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
-                    <span class="text-[8px] font-bold text-white uppercase">${t('cinema.load')}</span>
-                </div>
-                <button class="hist-delete absolute top-1 right-1 p-1 bg-red-500 rounded-md text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity" title="${t('common.delete')}">${TRASH_ICON}</button>
-            `;
-
-            thumb.onclick = (e) => {
-                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
-                loadHistoryItem(entry, thumb);
-            };
-            historyList.appendChild(thumb);
-        });
-    };
+    const renderHistory = () => historyPanel.render();
 
     const addToHistory = (entry) => {
         generationHistory.unshift(entry);
@@ -565,7 +565,7 @@ export function CinemaStudio() {
         renderHistory();
     };
 
-    const loadHistoryItem = (entry, thumbElement) => {
+    const loadHistoryItem = (entry) => {
         // Restore Settings
         if (entry.settings) {
             currentSettings.camera = entry.settings.camera;
@@ -583,15 +583,6 @@ export function CinemaStudio() {
 
         showCanvas(entry.url);
 
-        // Highlight active history item
-        if (thumbElement) {
-            historyList.querySelectorAll('div').forEach(t => {
-                t.classList.remove('border-[#22d3ee]', 'shadow-glow-sm');
-                t.classList.add('border-white/10');
-            });
-            thumbElement.classList.remove('border-white/10');
-            thumbElement.classList.add('border-[#22d3ee]', 'shadow-glow-sm');
-        }
     };
 
     const showCanvas = (url) => {
@@ -729,6 +720,7 @@ export function CinemaStudio() {
                 addToHistory({
                     url: res.url,
                     path: res.path, // file on disk (Wan2GP results), so Delete can remove it
+                    model: useLocalModel ? `local:${selectedLocalModel}` : 'nano-banana-pro',
                     timestamp: Date.now(),
                     settings: {
                         prompt: basePrompt,
