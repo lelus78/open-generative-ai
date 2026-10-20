@@ -94,6 +94,7 @@ async function engineStatus(cfg = readConfig()) {
         const install = local.resolveInstall(cfg);
         const check = local.checkInstall(install);
         if (!check.ok) return { ok: false, mode, error: check.error };
+        local.ensureBundledFinetunes(install);
         return { ok: true, mode, modelStatus: local.localModelStatus(install, modelTypes) };
     }
     if (mode === 'remote') {
@@ -201,6 +202,7 @@ async function generate(params, mainWindow) {
             const install = local.resolveInstall(cfg);
             const installCheck = local.checkInstall(install);
             if (!installCheck.ok) throw new Error(installCheck.error);
+            local.ensureBundledFinetunes(install);
             const settings = buildWan2gpSettings(model, params, { imageStart: imagePath, audioStart: audioPath });
             const { child, done } = local.runGeneration({ install, settings, runDir, onProgress: send });
             run.cancel = () => local.killTree(child);

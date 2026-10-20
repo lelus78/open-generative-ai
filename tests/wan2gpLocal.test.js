@@ -102,3 +102,31 @@ test('dryRun validates the install with --dry-run', async () => {
     const broken = await local.dryRun({ install: local.resolveInstall({ dir: FAKE_DIR, python: '/no/python' }), settings: {}, runDir: tmpRunDir() });
     assert.equal(broken.ok, false);
 });
+
+test('finetune definitions are found in finetunes/ and bundled ones are copied without overwriting', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wan2gp-finetunes-'));
+    fs.mkdirSync(path.join(dir, 'defaults'));
+    fs.mkdirSync(path.join(dir, 'ckpts'));
+    const install = local.resolveInstall({ dir });
+
+    const bundled = fs.mkdtempSync(path.join(os.tmpdir(), 'bundled-finetunes-'));
+    fs.writeFileSync(path.join(bundled, 'my_finetune.json'), JSON.stringify({ model: { name: 'x', URLs: ['https://hf.co/x/resolve/main/my_weights.safetensors'] } }));
+
+    assert.deepEqual(local.ensureBundledFinetunes(install, bundled), ['my_finetune.json']);
+    assert.equal(local.localModelStatus(install, ['my_finetune']).get('my_finetune'), 'missing');
+
+    fs.writeFileSync(path.join(dir, 'ckpts', 'my_weights.safetensors'), '');
+    assert.equal(local.localModelStatus(install, ['my_finetune']).get('my_finetune'), 'available');
+
+    // a second run keeps the user's copy
+    fs.writeFileSync(path.join(install.finetunesDir, 'my_finetune.json'), '{"model":{"name":"edited"}}');
+    assert.deepEqual(local.ensureBundledFinetunes(install, bundled), []);
+    assert.match(fs.readFileSync(path.join(install.finetunesDir, 'my_finetune.json'), 'utf-8'), /edited/);
+});
+
+test('the bundled Kroma definition points at the real Hugging Face file', () => {
+    const file = path.join(__dirname, '..', 'electron', 'finetunes', 'krea2_turbo_kroma_v031.json');
+    const def = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    assert.equal(def.model.architecture, 'krea2_turbo');
+    assert.match(def.model.URLs[0], /^https:\/\/huggingface\.co\/lodestones\/Kroma\/resolve\/main\/kroma-v0\.3\.1-turbo-opd\.safetensors$/);
+});

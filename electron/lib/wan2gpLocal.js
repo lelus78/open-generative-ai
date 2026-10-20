@@ -23,6 +23,7 @@ function resolveInstall({ dir, python } = {}, platform = process.platform) {
         python: (python || '').trim() || defaultPythonPath(root, platform),
         wgpPath: path.join(root, 'wgp.py'),
         defaultsDir: path.join(root, 'defaults'),
+        finetunesDir: path.join(root, 'finetunes'),
         ckptsDir: path.join(root, 'ckpts'),
     };
 }
@@ -42,19 +43,28 @@ function checkInstall(install) {
 //   (absent)        — no defaults/<type>.json: this Wan2GP version lacks the model
 // A definition's URLs is either a list of weight files or the name of another definition whose
 // weights it shares (e.g. i2v_fusionix -> "i2v"). Follow that chain a few levels.
-function resolveWeightUrls(defaultsDir, modelType, depth = 0) {
+// Definitions live in defaults/ (built-in models) or finetunes/ (extra models such as Kroma).
+function findDefinition(install, modelType) {
+    for (const dir of [install.defaultsDir, install.finetunesDir]) {
+        if (!dir) continue;
+        const file = path.join(dir, `${modelType}.json`);
+        if (fs.existsSync(file)) return file;
+    }
+    return null;
+}
+
+function resolveWeightUrls(install, modelType, depth = 0) {
     let urls = null;
-    try { urls = JSON.parse(fs.readFileSync(path.join(defaultsDir, `${modelType}.json`), 'utf-8'))?.model?.URLs; } catch { /* unreadable def */ }
-    if (typeof urls === 'string' && depth < 3) return resolveWeightUrls(defaultsDir, urls, depth + 1);
+    try { urls = JSON.parse(fs.readFileSync(findDefinition(install, modelType), 'utf-8'))?.model?.URLs; } catch { /* unreadable def */ }
+    if (typeof urls === 'string' && depth < 3) return resolveWeightUrls(install, urls, depth + 1);
     return Array.isArray(urls) ? urls : null;
 }
 
 function localModelStatus(install, modelTypes) {
     const statuses = new Map();
     for (const modelType of modelTypes) {
-        const defPath = path.join(install.defaultsDir, `${modelType}.json`);
-        if (!fs.existsSync(defPath)) continue;
-        const urls = resolveWeightUrls(install.defaultsDir, modelType);
+        if (!findDefinition(install, modelType)) continue;
+        const urls = resolveWeightUrls(install, modelType);
         if (!Array.isArray(urls) || urls.length === 0) {
             statuses.set(modelType, 'installed');
             continue;
@@ -203,7 +213,23 @@ function dryRun({ install, settings, runDir }) {
     });
 }
 
+// Extra model definitions shipped with the app (electron/finetunes/*.json) are copied into the
+// Wan2GP folder so Wan2GP knows them. An existing file is never overwritten (the user may have edited it).
+function ensureBundledFinetunes(install, sourceDir = path.join(__dirname, '..', 'finetunes')) {
+    if (!install?.finetunesDir || !fs.existsSync(sourceDir)) return [];
+    const copied = [];
+    fs.mkdirSync(install.finetunesDir, { recursive: true });
+    for (const name of fs.readdirSync(sourceDir).filter(n => n.endsWith('.json'))) {
+        const target = path.join(install.finetunesDir, name);
+        if (fs.existsSync(target)) continue;
+        fs.copyFileSync(path.join(sourceDir, name), target);
+        copied.push(name);
+    }
+    return copied;
+}
+
 module.exports = {
+    ensureBundledFinetunes,
     checkInstall,
     defaultPythonPath,
     dryRun,

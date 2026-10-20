@@ -104,6 +104,18 @@ const WAN2GP_CATALOG = [
         tags: ['image', 'hidream'],
     },
     {
+        id: 'wan2gp:kroma-v031',
+        name: 'Kroma v0.3.1 Turbo (Wan2GP)',
+        description: 'Image — Kroma (lodestones), a Krea 2 finetune distilled for Turbo speed (8-12 steps). Large download, quantized on the fly. Content may be unfiltered.',
+        type: 'image',
+        family: 'krea',
+        provider: 'wan2gp',
+        modelType: 'krea2_turbo_kroma_v031',
+        resolutions: RES_IMAGE,
+        aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        tags: ['image', 'krea', 'kroma', 'fast'],
+    },
+    {
         id: 'wan2gp:wan21-t2v-1.3b',
         name: 'Wan 2.1 1.3B (Text-to-Video)',
         description: 'Video — lightest Wan model, 480p. Runs on ~8 GB VRAM; a 5 s clip takes a few minutes.',

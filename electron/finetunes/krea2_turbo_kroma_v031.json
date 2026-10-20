@@ -1,0 +1,18 @@
+{
+    "model": {
+        "name": "Kroma v0.3.1 Turbo (OPD)",
+        "architecture": "krea2_turbo",
+        "description": "Kroma by lodestones: a Krea 2 finetune distilled on-policy, so it keeps Krea 2's look at Turbo speed (8-12 steps).",
+        "URLs": [
+            "https://huggingface.co/lodestones/Kroma/resolve/main/kroma-v0.3.1-turbo-opd.safetensors"
+        ],
+        "auto_quantize": true
+    },
+    "prompt": "a fox walking in fresh snow at golden hour, natural light, detailed fur",
+    "negative_prompt": "",
+    "batch_size": 1,
+    "denoising_strength": 1.0,
+    "masking_strength": 1.0,
+    "num_inference_steps": 8,
+    "guidance_scale": 0
+}
