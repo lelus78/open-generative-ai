@@ -14,6 +14,7 @@ const adaptLocalToVideoEntry = (m) => ({
     name: m.name,
     family: m.family,
     provider: 'wan2gp',
+    description: m.description,
     inputs: {
         prompt: { type: 'string', name: 'prompt', title: 'Prompt' },
         aspect_ratio: { type: 'string', name: 'aspect_ratio', enum: m.aspectRatios || ['16:9', '1:1', '9:16'], default: (m.aspectRatios || ['16:9'])[0] },
@@ -694,6 +695,7 @@ export function VideoStudio() {
                         </div>
                     </div>
                     <div class="text-[10px] font-bold text-secondary uppercase tracking-widest px-3 py-2 shrink-0">${useLocalModel ? t('video.localModels') : 'Video models'}</div>
+                    ${useLocalModel ? `<div class="text-[10px] text-muted leading-snug px-3 pb-2 shrink-0">${imageMode ? t('video.localListI2V') : t('video.localListT2V')}</div>` : ''}
                     <div id="v-model-list-container" class="flex flex-col gap-1.5 overflow-y-auto custom-scrollbar pr-1 pb-2"></div>
                 </div>
             `;
@@ -714,6 +716,7 @@ export function VideoStudio() {
                          <div class="w-10 h-10 shrink-0 ${iconColor} border border-white/5 rounded-xl flex items-center justify-center font-black text-sm shadow-inner uppercase">${m.provider === 'wan2gp' ? '⚡' : m.name.charAt(0)}</div>
                          <div class="flex flex-col gap-0.5 min-w-0">
                             <span class="text-xs font-bold text-white tracking-tight">${m.name}</span>
+                            ${m.provider === 'wan2gp' && m.description ? `<span class="text-[10px] text-muted leading-snug">${escapeHtml(m.description)}</span>` : ''}
                             ${isV2V ? `<span class="text-[9px] text-orange-400/70">${m.imageField ? 'Upload a video and image' : 'Upload a video to use'}</span>` : ''}
                             ${localNote}
                          </div>
