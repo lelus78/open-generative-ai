@@ -84,6 +84,8 @@ const translations = {
         'common.noResults': 'No local models match',
         'common.regenerate': '↻ Regenerate',
         'common.newItem': '+ New',
+        'common.delete': 'Delete',
+        'common.deleteResultConfirm': 'Delete this result? The file is removed from your disk and cannot be recovered.',
         'common.useInGenerator': 'Use in Generator',
         'common.randomize': 'Randomize',
 
@@ -244,6 +246,9 @@ const translations = {
         'localModels.storedIn': 'Stored in',
         'localModels.storedDefault': 'Stored in your app data folder',
         'localModels.changeFolder': 'Change folder…',
+        'localModels.generatedFiles': 'Generated files on disk',
+        'localModels.deleteGenerated': 'Delete all',
+        'localModels.deleteGeneratedConfirm': 'Delete every generated video/image and the images/audio you uploaded for local Wan2GP runs? Models are not touched. This cannot be undone.',
         'localModels.movingFolder': 'Working…',
         'localModels.checkingStorage': 'Checking storage...',
         'localModels.loading': 'Loading...',

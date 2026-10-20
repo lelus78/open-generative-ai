@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -1033,6 +1033,10 @@ export function VideoStudio() {
     extendBtn.textContent = t('video.extend');
     extendBtn.title = 'Extend this video using Seedance 2.0 Extend';
 
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'bg-red-500/10 hover:bg-red-500/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-red-500/20 backdrop-blur-lg text-red-400';
+    deleteBtn.textContent = t('common.delete');
+
     const newPromptBtn = document.createElement('button');
     newPromptBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
     newPromptBtn.textContent = t('video.new');
@@ -1040,6 +1044,7 @@ export function VideoStudio() {
     canvasControls.appendChild(regenerateBtn);
     canvasControls.appendChild(extendBtn);
     canvasControls.appendChild(downloadBtn);
+    canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
 
     canvas.appendChild(videoContainer);
@@ -1073,6 +1078,27 @@ export function VideoStudio() {
         renderHistory();
     };
 
+    // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
+    const deleteEntry = async (entry) => {
+        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+        try {
+            await removeGenerationFile(entry);
+        } catch (err) {
+            alert(err.message);
+            return;
+        }
+        const index = generationHistory.indexOf(entry);
+        if (index >= 0) generationHistory.splice(index, 1);
+        saveHistory('video_history', generationHistory, 30);
+        renderHistory();
+        if (resultVideo.src === entry.url) newPromptBtn.click();
+    };
+    deleteBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultVideo.src);
+        if (entry) deleteEntry(entry);
+        else newPromptBtn.click();
+    };
+
     const renderHistory = () => {
         historyList.innerHTML = '';
         generationHistory.forEach((entry, idx) => {
@@ -1082,6 +1108,7 @@ export function VideoStudio() {
             thumb.innerHTML = `
                 <video src="${entry.url}" preload="metadata" muted class="w-full aspect-square object-cover"></video>
                 <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    <button class="hist-delete p-1.5 bg-red-500 rounded-lg text-white hover:scale-110 transition-transform" title="${t('common.delete')}">${TRASH_ICON}</button>
                     <button class="hist-download p-1.5 bg-primary rounded-lg text-black hover:scale-110 transition-transform" title="Download">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     </button>
@@ -1089,6 +1116,7 @@ export function VideoStudio() {
             `;
 
             thumb.onclick = (e) => {
+                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
                 if (e.target.closest('.hist-download')) {
                     downloadFile(entry.url, `video-${entry.id || idx}.mp4`);
                     return;
@@ -1347,7 +1375,7 @@ export function VideoStudio() {
                     const genId = Date.now().toString();
                     lastGenerationId = null;
                     lastGenerationModel = null;
-                    addToHistory({ id: genId, url: res.url, prompt, model: selectedModel, aspect_ratio: selectedAr, seed: res.seed, timestamp: new Date().toISOString() });
+                    addToHistory({ id: genId, url: res.url, prompt, model: selectedModel, aspect_ratio: selectedAr, seed: res.seed, path: res.path, timestamp: new Date().toISOString() });
                     showVideoInCanvas(res.url, selectedModel);
                 } else {
                     throw new Error('No video URL returned by Wan2GP');

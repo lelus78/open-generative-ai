@@ -143,3 +143,15 @@ export function saveHistory(storageKey, entries, max) {
         } catch { /* quota exceeded: retry with a shorter list */ }
     }
 }
+
+export const TRASH_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>';
+
+/**
+ * Delete the file behind a history entry. Local Wan2GP results carry the `path` of the file on
+ * disk; cloud results and inline sd.cpp images have none, so only the history entry goes away.
+ */
+export async function removeGenerationFile(entry) {
+    if (entry?.path && window.localAI?.wan2gp?.deleteOutput) {
+        await window.localAI.wan2gp.deleteOutput(entry.path);
+    }
+}

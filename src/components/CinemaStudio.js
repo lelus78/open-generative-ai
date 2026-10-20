@@ -7,7 +7,7 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, saveHistory } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
 
 export function CinemaStudio() {
     const container = document.createElement('div');
@@ -502,17 +502,41 @@ export function CinemaStudio() {
     const regenerateBtn = createActionBtn(t('cinema.regenerate'));
     const downloadBtn = createActionBtn(t('cinema.download'), true);
     const copyBtn = createActionBtn(t('common.copy'));
+    const deleteBtn = createActionBtn(t('common.delete'));
+    deleteBtn.className = deleteBtn.className.replace('text-white', 'text-red-400');
     const newPromptBtn = createActionBtn(t('cinema.newShot'));
 
     canvasControls.appendChild(regenerateBtn);
     canvasControls.appendChild(downloadBtn);
     canvasControls.appendChild(copyBtn);
+    canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
     canvas.appendChild(canvasControls);
 
     container.appendChild(canvas);
 
     // --- History Logic ---
+    // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
+    const deleteEntry = async (entry) => {
+        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+        try {
+            await removeGenerationFile(entry);
+        } catch (err) {
+            alert(err.message);
+            return;
+        }
+        const index = generationHistory.indexOf(entry);
+        if (index >= 0) generationHistory.splice(index, 1);
+        saveHistory('cinema_history', generationHistory, 50);
+        renderHistory();
+        if (resultImg.src === entry.url) resetToPrompt();
+    };
+    deleteBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultImg.src);
+        if (entry) deleteEntry(entry);
+        else resetToPrompt();
+    };
+
     const renderHistory = () => {
         historyList.innerHTML = '';
         generationHistory.forEach((entry, idx) => {
@@ -524,9 +548,13 @@ export function CinemaStudio() {
                 <div class="absolute inset-0 bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
                     <span class="text-[8px] font-bold text-white uppercase">${t('cinema.load')}</span>
                 </div>
+                <button class="hist-delete absolute top-1 right-1 p-1 bg-red-500 rounded-md text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity" title="${t('common.delete')}">${TRASH_ICON}</button>
             `;
 
-            thumb.onclick = () => loadHistoryItem(entry, thumb);
+            thumb.onclick = (e) => {
+                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
+                loadHistoryItem(entry, thumb);
+            };
             historyList.appendChild(thumb);
         });
     };
@@ -700,6 +728,7 @@ export function CinemaStudio() {
                 // Save to history
                 addToHistory({
                     url: res.url,
+                    path: res.path, // file on disk (Wan2GP results), so Delete can remove it
                     timestamp: Date.now(),
                     settings: {
                         prompt: basePrompt,

@@ -449,6 +449,10 @@ export function LocalModelManager() {
             </div>
         </div>
         <div id="local-model-hw" class="text-[10px] text-muted"></div>
+        <div class="flex items-center justify-between gap-3">
+            <span id="local-outputs-info" class="text-[10px] text-muted"></span>
+            <button id="local-outputs-clear" class="shrink-0 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 transition-colors">${t('localModels.deleteGenerated')}</button>
+        </div>
         <div id="local-model-list" class="flex flex-col gap-3"></div>
     `;
     root.appendChild(modelsSection);
@@ -456,6 +460,35 @@ export function LocalModelManager() {
     const listEl = modelsSection.querySelector('#local-model-list');
     const storageEl = modelsSection.querySelector('#local-model-storage');
     const hwEl = modelsSection.querySelector('#local-model-hw');
+    const outputsInfoEl = modelsSection.querySelector('#local-outputs-info');
+    const outputsClearBtn = modelsSection.querySelector('#local-outputs-clear');
+    const fmtBytes = (b) => b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(b / 1024 ** 2))} MB`;
+    const refreshOutputsInfo = async () => {
+        try {
+            const { outputsBytes, inputsBytes } = await localAI.getOutputsUsage();
+            outputsInfoEl.textContent = `${t('localModels.generatedFiles')}: ${fmtBytes(outputsBytes + inputsBytes)}`;
+            outputsClearBtn.disabled = outputsBytes + inputsBytes === 0;
+            outputsClearBtn.classList.toggle('opacity-40', outputsClearBtn.disabled);
+        } catch (_) {
+            outputsInfoEl.textContent = '';
+        }
+    };
+    outputsClearBtn.onclick = async () => {
+        if (!confirm(t('localModels.deleteGeneratedConfirm'))) return;
+        try {
+            await localAI.clearOutputs();
+            // History entries that pointed to the deleted files would show broken thumbnails.
+            for (const key of ['video_history', 'lipsync_history', 'muapi_history', 'cinema_history']) {
+                try {
+                    const kept = (JSON.parse(localStorage.getItem(key)) || []).filter(e => !e.path);
+                    localStorage.setItem(key, JSON.stringify(kept));
+                } catch (_) { /* unreadable history: leave it */ }
+            }
+        } catch (err) {
+            alert(err.message);
+        }
+        refreshOutputsInfo();
+    };
     const changeFolderBtn = modelsSection.querySelector('#local-model-change-folder');
 
     const refreshStorageInfo = async () => {
@@ -504,6 +537,7 @@ export function LocalModelManager() {
     };
 
     refreshStorageInfo();
+    refreshOutputsInfo();
     renderModels();
 
     return root;

@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
 
 export function LipSyncStudio() {
     const container = document.createElement('div');
@@ -589,7 +589,11 @@ export function LipSyncStudio() {
     newBtn.textContent = t('lipsync.new');
 
     canvasControls.appendChild(regenerateBtn);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'bg-red-500/10 hover:bg-red-500/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-red-500/20 backdrop-blur-lg text-red-400';
+    deleteBtn.textContent = t('common.delete');
     canvasControls.appendChild(downloadBtn);
+    canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newBtn);
     canvas.appendChild(videoContainer);
     canvas.appendChild(canvasControls);
@@ -615,6 +619,27 @@ export function LipSyncStudio() {
         renderHistory();
     };
 
+    // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
+    const deleteEntry = async (entry) => {
+        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+        try {
+            await removeGenerationFile(entry);
+        } catch (err) {
+            alert(err.message);
+            return;
+        }
+        const index = generationHistory.indexOf(entry);
+        if (index >= 0) generationHistory.splice(index, 1);
+        saveHistory('lipsync_history', generationHistory, 30);
+        renderHistory();
+        if (resultVideo.src === entry.url) newBtn.click();
+    };
+    deleteBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultVideo.src);
+        if (entry) deleteEntry(entry);
+        else newBtn.click();
+    };
+
     const renderHistory = () => {
         historyList.innerHTML = '';
         generationHistory.forEach((entry, idx) => {
@@ -623,12 +648,14 @@ export function LipSyncStudio() {
             thumb.innerHTML = `
                 <video src="${entry.url}" preload="metadata" muted class="w-full aspect-square object-cover"></video>
                 <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
+                    <button class="hist-delete p-1.5 bg-red-500 rounded-lg text-white hover:scale-110 transition-transform mr-1" title="${t('common.delete')}">${TRASH_ICON}</button>
                     <button class="hist-download p-1.5 bg-primary rounded-lg text-black hover:scale-110 transition-transform" title="Download">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     </button>
                 </div>
             `;
             thumb.onclick = (e) => {
+                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
                 if (e.target.closest('.hist-download')) { downloadFile(entry.url, `lipsync-${entry.id || idx}.mp4`); return; }
                 showVideoInCanvas(entry.url);
                 historyList.querySelectorAll('div').forEach(t => { t.classList.remove('border-primary', 'shadow-glow'); t.classList.add('border-white/10'); });
@@ -811,7 +838,7 @@ export function LipSyncStudio() {
                         aspect_ratio: await probeAspect(uploadedImageUrl),
                     });
                     if (!res?.url) throw new Error('No video URL returned by Wan2GP');
-                    addToHistory({ id: Date.now().toString(), url: res.url, prompt, model: selectedModel, timestamp: new Date().toISOString() });
+                    addToHistory({ id: Date.now().toString(), url: res.url, prompt, model: selectedModel, path: res.path, timestamp: new Date().toISOString() });
                     showVideoInCanvas(res.url);
                 } finally {
                     unsubscribe();

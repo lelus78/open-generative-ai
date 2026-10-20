@@ -18,6 +18,7 @@ const { resolveLocalAiPaths } = require('./localInferencePaths');
 const { withWan2gpAvailability } = require('./wan2gpModelAvailability');
 const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('./wan2gpCatalog');
 const local = require('./wan2gpLocal');
+const outputStore = require('./outputStore');
 const { getHardwareProfile } = require('./hardwareProfile');
 const { createMcpClient, normalizeMcpUrl } = require('./wan2gpMcp');
 
@@ -280,6 +281,16 @@ function register() {
     ipcMain.handle('local-ai:hardware', async () => {
         const install = local.resolveInstall(readConfig());
         return getHardwareProfile(install?.ckptsDir || app.getPath('userData'));
+    });
+    // Generated files: delete one result, show the space used, or clear everything.
+    ipcMain.handle('wan2gp:delete-output', (_, filePath) => {
+        if (active) throw new Error('Wait for the running generation to finish first.');
+        return outputStore.deleteRunContaining(RUNS_DIR, filePath);
+    });
+    ipcMain.handle('wan2gp:storage-usage', () => outputStore.usage({ runsDir: RUNS_DIR, inputsDir: INPUTS_DIR }));
+    ipcMain.handle('wan2gp:clear-outputs', () => {
+        if (active) throw new Error('Wait for the running generation to finish first.');
+        return outputStore.clearAll({ runsDir: RUNS_DIR, inputsDir: INPUTS_DIR });
     });
     ipcMain.handle('wan2gp:check', (_, cfg) => check({ ...readConfig(), ...cfg }));
     ipcMain.handle('wan2gp:probe', (_, url) => probeRemote(url));

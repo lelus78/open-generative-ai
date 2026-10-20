@@ -11,7 +11,7 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, removeGenerationFile, TRASH_ICON } from '../lib/studioHelpers.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
 import { appendGenerationRefundNotice } from '../../packages/studio/src/utils/generationLifecycle.js';
@@ -1025,6 +1025,10 @@ export function ImageStudio() {
     copyBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
     copyBtn.textContent = t('common.copy');
 
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'bg-red-500/10 hover:bg-red-500/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-red-500/20 backdrop-blur-lg text-red-400';
+    deleteBtn.textContent = t('common.delete');
+
     const newPromptBtn = document.createElement('button');
     newPromptBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
     newPromptBtn.textContent = t('common.newItem');
@@ -1032,6 +1036,7 @@ export function ImageStudio() {
     canvasControls.appendChild(regenerateBtn);
     canvasControls.appendChild(downloadBtn);
     canvasControls.appendChild(copyBtn);
+    canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
 
     canvas.appendChild(imageContainer);
@@ -1067,6 +1072,27 @@ export function ImageStudio() {
         renderHistory();
     };
 
+    // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
+    const deleteEntry = async (entry) => {
+        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+        try {
+            await removeGenerationFile(entry);
+        } catch (err) {
+            alert(err.message);
+            return;
+        }
+        const index = generationHistory.indexOf(entry);
+        if (index >= 0) generationHistory.splice(index, 1);
+        saveHistory('muapi_history', generationHistory, 50);
+        renderHistory();
+        if (resultImg.src === entry.url) newPromptBtn.click();
+    };
+    deleteBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultImg.src);
+        if (entry) deleteEntry(entry);
+        else newPromptBtn.click();
+    };
+
     const renderHistory = () => {
         historyList.innerHTML = '';
         generationHistory.forEach((entry, idx) => {
@@ -1076,6 +1102,7 @@ export function ImageStudio() {
             thumb.innerHTML = `
                 <img src="${entry.url}" alt="${entry.prompt?.substring(0, 30) || 'Generated'}" class="w-full aspect-square object-cover">
                 <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                    <button class="hist-delete p-1.5 bg-red-500 rounded-lg text-white hover:scale-110 transition-transform" title="${t('common.delete')}">${TRASH_ICON}</button>
                     <button class="hist-download p-1.5 bg-primary rounded-lg text-black hover:scale-110 transition-transform" title="Download">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                     </button>
@@ -1083,6 +1110,7 @@ export function ImageStudio() {
             `;
 
             thumb.onclick = (e) => {
+                if (e.target.closest('.hist-delete')) { deleteEntry(entry); return; }
                 if (e.target.closest('.hist-download')) {
                     downloadImage(entry.url, `muapi-${entry.id || idx}.jpg`);
                     return;
@@ -1269,6 +1297,7 @@ export function ImageStudio() {
                     model: `local:${selectedLocalModel}`,
                     aspect_ratio: selectedAr,
                     seed: res.seed,
+                    path: res.path, // file on disk (Wan2GP results), so Delete can remove it
                     timestamp: new Date().toISOString()
                 });
                 showImageInCanvas(res.url);

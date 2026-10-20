@@ -58,6 +58,14 @@ class LocalInferenceClient {
         if (!isLocalAIAvailable()) return { ok: false, error: 'Not in desktop app' };
         return window.localAI.wan2gp.check(cfg);
     }
+    async getOutputsUsage() {
+        if (!isLocalAIAvailable()) return { outputsBytes: 0, inputsBytes: 0 };
+        return window.localAI.wan2gp.storageUsage();
+    }
+    async clearOutputs() {
+        if (!isLocalAIAvailable()) return { freedBytes: 0 };
+        return window.localAI.wan2gp.clearOutputs();
+    }
     async installWan2gp() {
         if (!isLocalAIAvailable()) throw new Error('Local AI only available in the desktop app.');
         return window.localAI.wan2gp.install();
