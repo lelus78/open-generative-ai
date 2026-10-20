@@ -91,6 +91,8 @@ app.whenReady().then(() => {
     });
 });
 
+app.on('before-quit', () => { try { require('./lib/wan2gpServer').stop(); } catch { /* not started */ } });
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();

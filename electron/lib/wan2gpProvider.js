@@ -18,6 +18,7 @@ const { resolveLocalAiPaths } = require('./localInferencePaths');
 const { withWan2gpAvailability } = require('./wan2gpModelAvailability');
 const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('./wan2gpCatalog');
 const local = require('./wan2gpLocal');
+const wan2gpServer = require('./wan2gpServer');
 const outputStore = require('./outputStore');
 const { getHardwareProfile } = require('./hardwareProfile');
 const { createMcpClient, normalizeMcpUrl } = require('./wan2gpMcp');
@@ -175,6 +176,30 @@ function mediaResult(filePath, seed) {
     return { url, mediaType, seed, path: filePath };
 }
 
+async function generateViaServer({ url, model, params, imagePath, runDir, run, send, translated }) {
+    const client = mcpClientFor(url);
+    const abort = new AbortController();
+    let jobId = null;
+    run.cancel = () => {
+        abort.abort();
+        client.cancel(jobId).catch(() => {});
+    };
+    const imageStart = imagePath
+        ? await client.uploadImage({ name: path.basename(imagePath), bytes: fs.readFileSync(imagePath) })
+        : undefined;
+    const settings = buildWan2gpSettings(model, params, { imageStart });
+    const item = await client.generate(settings, {
+        onProgress: send,
+        onJobId: (id) => { jobId = id; },
+        signal: abort.signal,
+    });
+    const { filename, bytes } = await client.download(item.media_id);
+    const mediaPath = path.join(runDir, path.basename(filename || `${item.media_id.replace(/\W/g, '_')}.mp4`));
+    fs.writeFileSync(mediaPath, bytes);
+    send({ status: 'done', progress: 1 });
+    return { ...mediaResult(mediaPath, settings.seed), ...(translated?.translatedPrompt ? { translatedPrompt: translated.translatedPrompt } : {}) };
+}
+
 async function generate(params, mainWindow) {
     if (active) throw new Error('A Wan2GP generation is already running.');
     const model = getModelById(params.model);
@@ -203,6 +228,14 @@ async function generate(params, mainWindow) {
             const installCheck = local.checkInstall(install);
             if (!installCheck.ok) throw new Error(installCheck.error);
             local.ensureBundledFinetunes(install);
+            // A persistent local server keeps the model loaded between generations. Audio-driven models
+            // and any server start-up problem fall back to one `--process` run per generation.
+            let serverUrl = null;
+            if (!audioPath) {
+                send({ status: 'starting', progress: 0 });
+                serverUrl = await wan2gpServer.ensure(install).catch(() => null);
+            }
+            if (serverUrl) return await generateViaServer({ url: serverUrl, model, params, imagePath, runDir, run, send, translated });
             const settings = buildWan2gpSettings(model, params, { imageStart: imagePath, audioStart: audioPath });
             const { child, done } = local.runGeneration({ install, settings, runDir, onProgress: send });
             run.cancel = () => local.killTree(child);
@@ -214,27 +247,7 @@ async function generate(params, mainWindow) {
         }
 
         if (model.needsAudio) throw new Error(`${model.name} needs a local Wan2GP folder: audio files cannot be sent to a remote server yet.`);
-        const client = mcpClientFor(cfg.url);
-        const abort = new AbortController();
-        let jobId = null;
-        run.cancel = () => {
-            abort.abort();
-            client.cancel(jobId).catch(() => {});
-        };
-        const imageStart = imagePath
-            ? await client.uploadImage({ name: path.basename(imagePath), bytes: fs.readFileSync(imagePath) })
-            : undefined;
-        const settings = buildWan2gpSettings(model, params, { imageStart });
-        const item = await client.generate(settings, {
-            onProgress: send,
-            onJobId: (id) => { jobId = id; },
-            signal: abort.signal,
-        });
-        const { filename, bytes } = await client.download(item.media_id);
-        const mediaPath = path.join(runDir, path.basename(filename || `${item.media_id.replace(/\W/g, '_')}.mp4`));
-        fs.writeFileSync(mediaPath, bytes);
-        send({ status: 'done', progress: 1 });
-        return mediaResult(mediaPath, settings.seed);
+        return await generateViaServer({ url: cfg.url, model, params, imagePath, runDir, run, send });
     } catch (err) {
         if (run.cancelled) throw new Error('Generation cancelled');
         throw err;
@@ -260,6 +273,7 @@ function register() {
         return { ...cfg, mode: engineMode(cfg), defaultPython: cfg.dir ? local.defaultPythonPath(cfg.dir) : '' };
     });
     ipcMain.handle('wan2gp:set-config', (_, cfg) => {
+        wan2gpServer.stop();
         mcpClients.clear();
         return { ok: true, config: writeConfig({ ...readConfig(), ...cfg }) };
     });

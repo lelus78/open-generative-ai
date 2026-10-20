@@ -229,6 +229,7 @@ function ensureBundledFinetunes(install, sourceDir = path.join(__dirname, '..', 
 }
 
 module.exports = {
+    spawnWgp,
     ensureBundledFinetunes,
     checkInstall,
     defaultPythonPath,
