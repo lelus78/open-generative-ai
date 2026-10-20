@@ -401,6 +401,21 @@ export function ImageStudio() {
     // ==========================================
     // 4. ADVANCED OPTIONS PANEL
     // ==========================================
+    // Text appended to the prompt for each preset (the buttons only set `selectedStyle`).
+    const STYLE_PROMPTS = {
+        'Photorealistic': 'photorealistic, ultra detailed, natural lighting, sharp focus, 35mm photo',
+        'Anime': 'anime style, vibrant colors, clean line art, cel shading, detailed illustration',
+        'Cinematic': 'cinematic still, dramatic lighting, shallow depth of field, anamorphic lens, film grain, color graded',
+        'Oil Painting': 'oil painting, visible brush strokes, rich textures, classical fine art',
+        'Watercolor': 'watercolor painting, soft washes, flowing pigments, paper texture',
+        'Digital Art': 'digital art, highly detailed, polished, trending on artstation',
+        'Concept Art': 'concept art, detailed environment design, painterly, professional production art',
+        'Cyberpunk': 'cyberpunk, neon lights, rain-soaked futuristic city, high contrast, glowing accents',
+    };
+    const applyStyle = (text) => {
+        const extra = STYLE_PROMPTS[selectedStyle];
+        return extra && text ? `${text}, ${extra}` : text;
+    };
     const STYLE_PRESETS = ['None', 'Photorealistic', 'Anime', 'Cinematic', 'Oil Painting', 'Watercolor', 'Digital Art', 'Concept Art', 'Cyberpunk'];
     
     const advancedPanel = document.createElement('div');
@@ -1253,6 +1268,7 @@ export function ImageStudio() {
         }
 
         if (prompt) savePrompt(prompt);
+        const styledPrompt = applyStyle(prompt);
 
         // ── Local inference path ──────────────────────────────────────────────
         if (useLocalModel) {
@@ -1281,7 +1297,7 @@ export function ImageStudio() {
             try {
                 const res = await localAI.generate({
                     model: selectedLocalModel,
-                    prompt,
+                    prompt: styledPrompt,
                     negative_prompt: negativePrompt || undefined,
                     aspect_ratio: selectedAr,
                     steps: stepsTouched ? steps : undefined,
@@ -1351,14 +1367,14 @@ export function ImageStudio() {
                         savePendingJob({ requestId: rid, studioType: 'image', historyMeta, maxAttempts: 60, interval: 2000, submittedAt: Date.now() });
                     }
                 };
-                if (prompt) genParams.prompt = prompt;
+                if (prompt) genParams.prompt = styledPrompt;
                 const qualityField = getCurrentQualityField(selectedModel);
                 if (qualityField && qualityLabel) genParams[qualityField] = qualityLabel;
                 res = await muapi.generateI2I(genParams);
             } else {
                 const genParams = {
                     model: selectedModel,
-                    prompt,
+                    prompt: styledPrompt,
                     aspect_ratio: selectedAr,
                     onRequestId: (rid) => {
                         capturedRequestId = rid;
