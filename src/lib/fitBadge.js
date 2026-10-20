@@ -13,6 +13,12 @@ export function sortByFit(models, infoOf = (m) => m) {
         .map(x => x.m);
 }
 
+/** Green tag for models whose weights are already on disk (no download needed). */
+export function downloadedBadgeHtml(info) {
+    if (!(info?.downloaded || info?.state === 'downloaded')) return '';
+    return `<span class="px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide bg-primary/15 text-primary">✓ ${t('fit.downloaded')}</span>`;
+}
+
 export function fitBadgeHtml(info) {
     if (!info?.fit || info.fit === 'unknown') return '';
     const styles = {

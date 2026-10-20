@@ -5,7 +5,7 @@ import { t, tf } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
-import { fitBadgeHtml, sortByFit } from '../lib/fitBadge.js';
+import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -716,7 +716,7 @@ export function VideoStudio() {
                     <div class="flex items-center gap-3.5 min-w-0">
                          <div class="w-10 h-10 shrink-0 ${iconColor} border border-white/5 rounded-xl flex items-center justify-center font-black text-sm shadow-inner uppercase">${m.provider === 'wan2gp' ? '⚡' : m.name.charAt(0)}</div>
                          <div class="flex flex-col gap-0.5 min-w-0">
-                            <span class="text-xs font-bold text-white tracking-tight">${m.name} ${local ? fitBadgeHtml(local) : ''}</span>
+                            <span class="text-xs font-bold text-white tracking-tight">${m.name} ${local ? downloadedBadgeHtml(local) + fitBadgeHtml(local) : ''}</span>
                             ${m.provider === 'wan2gp' && m.description ? `<span class="text-[10px] text-muted leading-snug">${escapeHtml(m.description)}</span>` : ''}
                             ${isV2V ? `<span class="text-[9px] text-orange-400/70">${m.imageField ? 'Upload a video and image' : 'Upload a video to use'}</span>` : ''}
                             ${localNote}

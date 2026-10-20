@@ -10,7 +10,7 @@ import { ENHANCE_TAGS, QUICK_PROMPTS } from '../lib/promptUtils.js';
 import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
-import { fitBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
+import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
 import { appendGenerationRefundNotice } from '../../packages/studio/src/utils/generationLifecycle.js';
@@ -826,7 +826,7 @@ export function ImageStudio() {
                                     <div class="flex items-center gap-1.5">
                                         <span class="text-xs font-bold text-white tracking-tight">${m.name}</span>
                                         ${m.featured ? '<span class="text-[9px] font-black px-1 py-0.5 rounded bg-primary/20 text-primary">FEATURED</span>' : ''}
-                                        ${fitBadgeHtml(info)}
+                                        ${downloadedBadgeHtml(info)}${fitBadgeHtml(info)}
                                     </div>
                                     <span class="text-[10px] text-muted">${m.type.toUpperCase()} · ${m.family}</span>
                                     ${blocked ? `<span class="text-[9px] text-yellow-400/80 leading-snug">${(info.unavailableReason || info.fitReason || '').replace(/[<>&]/g, '')}</span>` : ''}

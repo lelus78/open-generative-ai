@@ -28,7 +28,8 @@ function withWan2gpAvailability(model, engine) {
         : {};
 
     if (status === 'installed' || status === 'available') {
-        return { ...model, ready: true, ...fitInfo };
+        // 'available' = weight files found in ckpts/; 'installed' = defined, files unknown.
+        return { ...model, ready: true, ...fitInfo, ...(status === 'available' ? { downloaded: true } : {}) };
     }
     if (status === 'missing') {
         const size = rated?.downloadGB ? `~${rated.downloadGB} GB` : 'several GB';

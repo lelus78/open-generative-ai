@@ -1,6 +1,6 @@
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { t, tf } from '../lib/i18n.js';
-import { fitBadgeHtml, sortByFit, hardwareSummary } from '../lib/fitBadge.js';
+import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, hardwareSummary } from '../lib/fitBadge.js';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 const DownloadIcon = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>`;
@@ -291,7 +291,7 @@ function Wan2gpModelCard(model) {
             <div class="flex items-center gap-2 flex-wrap">
                 <span class="text-sm font-bold text-white truncate">${model.name}</span>
                 ${ready ? `<span class="text-green-400">${CheckIcon}</span>` : ''}
-                ${fitBadgeHtml(model)}
+                ${downloadedBadgeHtml(model)}${fitBadgeHtml(model)}
             </div>
             <p class="text-[11px] text-muted leading-relaxed">${model.description}</p>
             ${ready && model.fit === 'heavy' ? `<p class="text-[10px] text-yellow-400/80 leading-relaxed">${escapeHtml(model.fitReason)}</p>` : ''}
@@ -327,7 +327,7 @@ function ModelCard(model, onStateChange) {
                     <span class="text-sm font-bold text-white truncate">${model.name}</span>
                     ${model.featured ? `<span class="px-1.5 py-0.5 rounded-md text-[10px] font-black bg-primary/20 text-primary border border-primary/30">${t('localModels.featured')}</span>` : ''}
                     ${fullyReady ? `<span class="text-green-400">${CheckIcon}</span>` : ''}
-                    ${fitBadgeHtml(model)}
+                    ${fullyReady ? downloadedBadgeHtml(model) : ''}${fitBadgeHtml(model)}
                 </div>
                 <p class="text-[11px] text-muted leading-relaxed">${model.description}</p>
                 ${model.fit === 'unfit' && !fullyReady ? `<p class="text-[10px] text-red-400/80 leading-relaxed">${escapeHtml(model.fitReason)}</p>` : ''}
