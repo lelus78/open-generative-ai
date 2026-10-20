@@ -184,6 +184,7 @@ function Wan2gpConfigBar(onChange) {
             <span class="text-[10px] text-muted leading-relaxed">${t('localModels.wan2gpRemoteHelp')}</span>
         </div>
         <div class="flex items-center gap-2 justify-end">
+            <button id="wan2gp-install" class="${secondaryBtn} mr-auto" title="${t('localModels.installHelp')}">${t('localModels.installWan2gp')}</button>
             <button id="wan2gp-check" class="${secondaryBtn}">${t('localModels.check')}</button>
             <button id="wan2gp-save" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-black hover:shadow-glow transition-all">${t('localModels.save')}</button>
         </div>
@@ -196,6 +197,7 @@ function Wan2gpConfigBar(onChange) {
     const checkBtn = wrap.querySelector('#wan2gp-check');
     const saveBtn = wrap.querySelector('#wan2gp-save');
     const statusEl = wrap.querySelector('#wan2gp-status');
+    const installBtn = wrap.querySelector('#wan2gp-install');
     const setStatus = (text, kind = 'muted') => {
         const colorMap = { muted: 'text-muted', ok: 'text-green-400', warn: 'text-yellow-400', err: 'text-red-400' };
         statusEl.className = `text-[11px] whitespace-pre-wrap break-words ${colorMap[kind] || colorMap.muted}`;
@@ -214,6 +216,31 @@ function Wan2gpConfigBar(onChange) {
         const modeLabel = r.mode === 'remote' ? t('localModels.modeRemote') : t('localModels.modeLocal');
         setStatus(r.ok ? `${modeLabel} · ${r.message}` : `${modeLabel} · ${r.error}`, r.ok ? 'ok' : 'err');
         return r;
+    };
+
+    installBtn.onclick = async () => {
+        if (!confirm(t('localModels.installConfirm'))) return;
+        installBtn.disabled = true;
+        const unsub = localAI.onDownloadProgress(({ id, phase, message }) => {
+            if (id !== 'wan2gp-install') return;
+            if (phase === 'installing' && message) setStatus(message, 'muted');
+        });
+        setStatus(t('localModels.installing'), 'muted');
+        try {
+            const res = await localAI.installWan2gp();
+            const cfg = await localAI.getWan2gpConfig();
+            dirInput.value = cfg.dir || res.dir || '';
+            pythonInput.value = cfg.python || '';
+            updatePythonPlaceholder();
+            await runCheck({ quick: true });
+            onChange?.();
+        } catch (err) {
+            setStatus(`${t('localModels.installFailed')}
+${err.message}`, 'err');
+        } finally {
+            unsub();
+            installBtn.disabled = false;
+        }
     };
 
     dirInput.oninput = updatePythonPlaceholder;

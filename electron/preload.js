@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('localAI', {
         setUrl:     (url) => ipcRenderer.invoke('wan2gp:set-url', url),
         check:      (cfg) => ipcRenderer.invoke('wan2gp:check', cfg),
         pickFolder: () => ipcRenderer.invoke('wan2gp:pick-folder'),
+        install:    () => ipcRenderer.invoke('wan2gp:install'),
         probe:      (url) => ipcRenderer.invoke('wan2gp:probe', url),
         listModels: () => ipcRenderer.invoke('wan2gp:list-models'),
         generate:   (params) => ipcRenderer.invoke('wan2gp:generate', params),

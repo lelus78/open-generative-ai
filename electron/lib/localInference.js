@@ -706,4 +706,6 @@ function register() {
 
 module.exports = {
     register,
+    downloadFile,
+    getDataDir: () => DATA_DIR,
 };

@@ -246,6 +246,22 @@ function register() {
         writeConfig({ ...readConfig(), url });
         return { ok: true };
     });
+    ipcMain.handle('wan2gp:install', async () => {
+        const { installWan2gp } = require('./wan2gpInstaller');
+        const { downloadFile, getDataDir } = require('./localInference');
+        const send = (data) => getMainWindow()?.webContents.send('local-ai:download-progress', { id: 'wan2gp-install', ...data });
+        send({ phase: 'installing', message: 'Starting…' });
+        try {
+            const { dir } = await installWan2gp({ dataDir: getDataDir(), downloadFile, send });
+            mcpClients.clear();
+            writeConfig({ ...readConfig(), dir, python: '' });
+            send({ phase: 'done', progress: 1 });
+            return { ok: true, dir };
+        } catch (err) {
+            send({ phase: 'error', error: err.message });
+            throw err;
+        }
+    });
     ipcMain.handle('wan2gp:check', (_, cfg) => check({ ...readConfig(), ...cfg }));
     ipcMain.handle('wan2gp:probe', (_, url) => probeRemote(url));
     ipcMain.handle('wan2gp:pick-folder', async () => {
