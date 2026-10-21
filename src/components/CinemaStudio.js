@@ -129,7 +129,7 @@ export function CinemaStudio() {
     let localInfo = new Map(); // id → model info (state / fit / readiness) from the desktop app
     let selectedLocalModel = null;
     try { selectedLocalModel = localStorage.getItem('cinema_local_model'); } catch { /* storage unavailable */ }
-    const localImageModels = isLocalAIAvailable() ? LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video') : [];
+    const localImageModels = isLocalAIAvailable() ? LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && !m.edit) : [];
 
     // sd.cpp models must already be on disk (they download from Settings); Wan2GP ones may download on first use.
     const isLocalUsable = (m) => {

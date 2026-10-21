@@ -44,14 +44,40 @@ export function ImageStudio() {
     // Local inference state — only image-capable models surface here.
     // sd.cpp uses type='sd1'|'sdxl'|'z-image'; Wan2GP image models use type='image'.
     // Wan2GP video models (type='video') are hidden from ImageStudio.
-    const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video');
+    const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && !m.edit);
+    // With a picture uploaded (image-to-image) the local list switches to the edit models.
+    const LOCAL_EDIT_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.edit);
     let useLocalModel = false;
     let localFitInfo = new Map(); // id → fit/readiness reported by the desktop app
     let selectedLocalModel = LOCAL_IMAGE_MODELS[0]?.id || null;
+    let selectedEditModel = LOCAL_EDIT_MODELS[0]?.id || null;
     try {
         const savedLocal = localStorage.getItem('image_local_model');
         if (LOCAL_IMAGE_MODELS.some(m => m.id === savedLocal)) selectedLocalModel = savedLocal;
+        const savedEdit = localStorage.getItem('image_local_edit_model');
+        if (LOCAL_EDIT_MODELS.some(m => m.id === savedEdit)) selectedEditModel = savedEdit;
     } catch { /* storage unavailable */ }
+    const activeLocalId = () => (imageMode ? selectedEditModel : selectedLocalModel);
+    // Button labels for the local model in use (text-to-image or edit, depending on the uploaded picture).
+    const refreshLocalModelLabel = () => {
+        const lm = getLocalModelById(activeLocalId());
+        if (!lm) return;
+        document.getElementById('model-btn-label').textContent = lm.name;
+        selectedAr = lm.aspectRatios[0];
+        document.getElementById('ar-btn-label').textContent = selectedAr;
+        qualityBtn.style.display = 'none';
+    };
+    // Aspect ratio of the uploaded picture, snapped to the ones the model offers (edits keep the framing).
+    const aspectOfImage = (url, allowed) => new Promise((resolve) => {
+        const probe = new Image();
+        probe.onload = () => {
+            const target = probe.naturalWidth / probe.naturalHeight;
+            const value = (ar) => { const [w, h] = ar.split(':').map(Number); return w / h; };
+            resolve([...allowed].sort((a, b) => Math.abs(value(a) - target) - Math.abs(value(b) - target))[0]);
+        };
+        probe.onerror = () => resolve(allowed[0]);
+        probe.src = url;
+    });
     let localGenProgress = 0; // 0–1
 
     // Advanced parameters state
@@ -126,7 +152,7 @@ export function ImageStudio() {
     // --- Image Upload Picker (Image-to-Image) ---
     const picker = createUploadPicker({
         anchorContainer: container,
-        uploadFn: (file) => useLocalModel ? URL.createObjectURL(file) : muapi.uploadFile(file),
+        uploadFn: (file) => useLocalModel ? localAI.uploadFileToWan2gp(file) : muapi.uploadFile(file),
         requireApiKey: () => !useLocalModel,
         onSelect: ({ url, urls }) => {
             uploadedImageUrls = urls || [url];
@@ -142,6 +168,7 @@ export function ImageStudio() {
                 if (validResolutions.length > 0) document.getElementById('quality-btn-label').textContent = validResolutions[0];
                 picker.setMaxImages(getMaxImagesForI2IModel(selectedModel));
             }
+            if (useLocalModel) refreshLocalModelLabel();
             textarea.placeholder = uploadedImageUrls.length > 1
                 ? `${uploadedImageUrls.length} ${t('image.multiImageNote') || 'images selected — describe the transformation (optional)'}`
                 : t('image.placeholderTransform');
@@ -158,6 +185,7 @@ export function ImageStudio() {
             qualityBtn.style.display = t2iResolutions.length > 0 ? 'flex' : 'none';
             if (t2iResolutions.length > 0) document.getElementById('quality-btn-label').textContent = t2iResolutions[0];
             picker.setMaxImages(1);
+            if (useLocalModel) refreshLocalModelLabel();
             textarea.placeholder = t('image.placeholder');
         }
     });
@@ -235,7 +263,7 @@ export function ImageStudio() {
             updateLocalToggleStyle();
             // Reflect active model in the button label
             if (useLocalModel) {
-                const lm = getLocalModelById(selectedLocalModel);
+                const lm = getLocalModelById(activeLocalId());
                 if (lm) document.getElementById('model-btn-label').textContent = lm.name;
             } else {
                 document.getElementById('model-btn-label').textContent = selectedModelName;
@@ -803,7 +831,7 @@ export function ImageStudio() {
 
                 if (useLocalModel) {
                     // ── Local model list (Wan2GP image-capable models only) ───
-                    const filtered = sortByFit(LOCAL_IMAGE_MODELS.filter(m =>
+                    const filtered = sortByFit((imageMode ? LOCAL_EDIT_MODELS : LOCAL_IMAGE_MODELS).filter(m =>
                         m.name.toLowerCase().includes(filter.toLowerCase()) ||
                         m.id.toLowerCase().includes(filter.toLowerCase())
                     ), m => localFitInfo.get(m.id));
@@ -815,7 +843,7 @@ export function ImageStudio() {
                         const item = document.createElement('div');
                         const info = localFitInfo.get(m.id);
                         const blocked = info?.fit === 'unfit' || info?.ready === false;
-                        item.className = `flex items-center justify-between p-3.5 rounded-2xl transition-all border border-transparent ${blocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5 cursor-pointer hover:border-white/5'} ${selectedLocalModel === m.id ? 'bg-white/5 border-white/5' : ''}`;
+                        item.className = `flex items-center justify-between p-3.5 rounded-2xl transition-all border border-transparent ${blocked ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5 cursor-pointer hover:border-white/5'} ${activeLocalId() === m.id ? 'bg-white/5 border-white/5' : ''}`;
                         item.innerHTML = `
                             <div class="flex items-center gap-3.5">
                                 <div class="w-10 h-10 ${m.featured ? 'bg-primary/10 text-primary' : 'bg-green-500/10 text-green-400'} border border-white/5 rounded-xl flex items-center justify-center font-black text-sm shadow-inner uppercase">${m.featured ? '⚡' : m.name.charAt(0)}</div>
@@ -829,13 +857,13 @@ export function ImageStudio() {
                                     ${blocked ? `<span class="text-[9px] text-yellow-400/80 leading-snug">${(info.unavailableReason || info.fitReason || '').replace(/[<>&]/g, '')}</span>` : ''}
                                 </div>
                             </div>
-                            ${selectedLocalModel === m.id ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+                            ${activeLocalId() === m.id ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" stroke-width="4"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
                         `;
                         item.onclick = (e) => {
                             e.stopPropagation();
                             if (blocked) return;
-                            selectedLocalModel = m.id;
-                            try { localStorage.setItem('image_local_model', m.id); } catch { /* storage unavailable */ }
+                            if (imageMode) selectedEditModel = m.id; else selectedLocalModel = m.id;
+                            try { localStorage.setItem(imageMode ? 'image_local_edit_model' : 'image_local_model', m.id); } catch { /* storage unavailable */ }
                             document.getElementById('model-btn-label').textContent = m.name;
                             selectedAr = m.aspectRatios[0];
                             document.getElementById('ar-btn-label').textContent = selectedAr;
@@ -1223,7 +1251,10 @@ export function ImageStudio() {
         picker.setMaxImages(1);
         // Keep the user's model, aspect ratio and local/API choice; only leave
         // image-to-image mode (the reference image was just cleared) for the default t2i model.
-        if (imageMode && !useLocalModel) {
+        if (imageMode && useLocalModel) {
+            imageMode = false;
+            refreshLocalModelLabel();
+        } else if (imageMode) {
             imageMode = false;
             selectedModel = t2iModels[0].id;
             selectedModelName = t2iModels[0].name;
@@ -1255,12 +1286,18 @@ export function ImageStudio() {
             }
         }
 
+        if (imageMode && useLocalModel && !prompt) {
+            alert('Describe the change you want, e.g. "make the dog black".');
+            return;
+        }
         promptHistory.remember(prompt);
-        const styledPrompt = applyStyle(prompt);
+        // Edit instructions are sent as written: a style preset would add words to them.
+        const styledPrompt = imageMode && useLocalModel ? prompt : applyStyle(prompt);
 
         // ── Local inference path ──────────────────────────────────────────────
         if (useLocalModel) {
-            const lm = getLocalModelById(selectedLocalModel);
+            const localModelId = activeLocalId();
+            const lm = getLocalModelById(localModelId);
             if (!lm) { alert('No local model selected.'); return; }
 
             hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
@@ -1281,7 +1318,7 @@ export function ImageStudio() {
                 // Downloading weights has no real percentage: show a pulsing bar and the amount instead.
                 const downloading = event.status === 'downloading';
                 // With the estimated size of the download (from the model list) the bar can show real progress.
-                const expectedGB = downloading ? localFitInfo.get(selectedLocalModel)?.downloadGB : null;
+                const expectedGB = downloading ? localFitInfo.get(localModelId)?.downloadGB : null;
                 const knownFraction = expectedGB ? Math.min(0.99, (event.downloadedBytes || 0) / (expectedGB * 1024 ** 3)) : null;
                 if (progressTitle) progressTitle.textContent = expectedGB ? `${label} · ~${expectedGB} GB` : label;
                 if (progressFill) {
@@ -1295,10 +1332,11 @@ export function ImageStudio() {
             let hadError = false;
             try {
                 const res = await localAI.generate({
-                    model: selectedLocalModel,
+                    model: localModelId,
                     prompt: styledPrompt,
                     negative_prompt: negativePrompt || undefined,
-                    aspect_ratio: selectedAr,
+                    ...(imageMode ? { image: uploadedImageUrls[0] } : {}),
+                    aspect_ratio: imageMode ? await aspectOfImage(uploadedImageUrls[0], lm.aspectRatios) : selectedAr,
                     steps: stepsTouched ? steps : undefined,
                     guidance_scale: guidanceTouched ? guidanceScale : undefined,
                     seed,
@@ -1315,7 +1353,7 @@ export function ImageStudio() {
                     id: Date.now().toString(),
                     url: res.url,
                     prompt,
-                    model: `local:${selectedLocalModel}`,
+                    model: `local:${localModelId}`,
                     aspect_ratio: selectedAr,
                     seed: res.seed,
                     path: res.path, // file on disk (Wan2GP results), so Delete can remove it

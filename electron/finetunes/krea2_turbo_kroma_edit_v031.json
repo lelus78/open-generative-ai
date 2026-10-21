@@ -1,0 +1,24 @@
+{
+    "model": {
+        "name": "Kroma v0.3.1 Turbo Edit General v2",
+        "architecture": "krea2_turbo_edit",
+        "description": "Instruction-based image editing (recolor, relight, change background, add objects) with Kroma as the base: the Krea 2 General Edit v2 LoRA on top of the Kroma weights.",
+        "URLs": [
+            "https://huggingface.co/lodestones/Kroma/resolve/main/kroma-v0.3.1-turbo-opd.safetensors"
+        ],
+        "auto_quantize": true,
+        "loras": [
+            "https://huggingface.co/DeepBeepMeep/krea-2/resolve/main/krea2_general_edit_v2.safetensors"
+        ],
+        "loras_multipliers": [
+            1
+        ]
+    },
+    "prompt": "Change the car color to matte black and keep the camera angle and surroundings unchanged.",
+    "negative_prompt": "",
+    "video_prompt_type": "KI",
+    "model_mode": 0,
+    "batch_size": 1,
+    "num_inference_steps": 8,
+    "guidance_scale": 0
+}

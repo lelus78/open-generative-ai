@@ -117,6 +117,32 @@ const WAN2GP_CATALOG = [
         tags: ['image', 'krea', 'kroma', 'fast'],
     },
     {
+        id: 'wan2gp:kroma-edit',
+        name: 'Kroma Edit — change an image with a prompt (Wan2GP)',
+        description: 'Image edit — Kroma + Krea 2 General Edit v2: recolor, relight, change the background or add objects while keeping the rest of the picture. Reuses the Kroma download.',
+        type: 'image',
+        edit: true,
+        family: 'krea',
+        provider: 'wan2gp',
+        modelType: 'krea2_turbo_kroma_edit_v031',
+        resolutions: RES_IMAGE,
+        aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        tags: ['image', 'edit', 'krea', 'kroma'],
+    },
+    {
+        id: 'wan2gp:krea-2-edit',
+        name: 'Krea 2 Turbo Edit General v2 (Wan2GP)',
+        description: 'Image edit — Krea 2 Turbo with the General Edit v2 LoRA: recolor, relight, restyle or add objects while preserving the rest of the picture.',
+        type: 'image',
+        edit: true,
+        family: 'krea',
+        provider: 'wan2gp',
+        modelType: 'krea2_turbo_general_edit_v2',
+        resolutions: RES_IMAGE,
+        aspectRatios: ['1:1', '4:3', '3:4', '16:9', '9:16'],
+        tags: ['image', 'edit', 'krea'],
+    },
+    {
         id: 'wan2gp:wan21-t2v-1.3b',
         name: 'Wan 2.1 1.3B (Text-to-Video)',
         description: 'Video — lightest Wan model, 480p. Runs on ~8 GB VRAM; a 5 s clip takes a few minutes.',
@@ -285,6 +311,9 @@ function buildWan2gpSettings(model, params = {}, { imageStart, audioStart } = {}
     if (model.needsImage && !imageStart) {
         throw new Error(`${model.name} requires a start-frame image — upload one first.`);
     }
+    if (model.edit && !imageStart) {
+        throw new Error(`${model.name} edits an existing picture — upload one first.`);
+    }
     if (model.needsAudio && !audioStart) {
         throw new Error(`${model.name} requires an audio file — upload one first.`);
     }
@@ -308,7 +337,13 @@ function buildWan2gpSettings(model, params = {}, { imageStart, audioStart } = {}
     const seed = toInt(params.seed);
     settings.seed = seed !== null && seed >= 0 ? seed : Math.floor(Math.random() * 2147483647);
 
-    if (imageStart) settings.image_start = imageStart;
+    if (model.edit) {
+        // Edit models take the picture as a reference image and the prompt as the instruction.
+        settings.video_prompt_type = 'KI';
+        settings.image_refs = [imageStart];
+    } else if (imageStart) {
+        settings.image_start = imageStart;
+    }
 
     if (audioStart) {
         // Audio-driven (lip sync) models: the portrait is both the first frame and the identity

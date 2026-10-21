@@ -178,6 +178,25 @@ Open Generative AI is a free, open-source AI image, video, cinema, and lip sync 
 
 For a deep dive into the technical architecture and the philosophy behind the "Infinite Budget" cinema workflow, see our [comprehensive guide and roadmap](https://medium.com/@anilmatcha/).
 
+## 🖥️ This fork: a local-first desktop app
+
+This fork focuses on running everything **on your own PC** from the desktop app, with no API key and nothing leaving the machine. Highlights:
+
+- **Local Image, Video, Lip Sync and Cinema studios.** The **⚡ Local** toggle next to the model picker runs the studio on sd.cpp or Wan2GP instead of a cloud API; the choice is remembered between launches.
+- **One-click Wan2GP install.** Settings → Local Models → *Install Wan2GP* downloads `uv`, Python 3.11, PyTorch (CUDA build picked from your NVIDIA driver) and Wan2GP, no git or Python needed. A PowerShell script (`scripts/install-wan2gp.ps1`) does the same from a terminal.
+- **Models that fit your PC.** The app reads the GPU, RAM and free disk of the machine it runs on, then marks each model *Recommended*, *Heavy* or *Won't fit* (with the reason and the download size), sorts the list accordingly and shows which models are already downloaded. Older model families (SD 1.5, SDXL, Chroma) are listed last, as **Legacy**, on GPUs with 12 GB or more.
+- **Newer image models.** Qwen Image (2.1 / Turbo), Ideogram v4, Krea 2 Turbo, [Kroma](https://huggingface.co/lodestones/Kroma) (a Krea 2 finetune, bundled as a Wan2GP finetune), HiDream O1 and Flux.1 Dev, next to the Z-Image models of sd.cpp.
+- **Image editing from a prompt** (Kroma Edit, Krea 2 Turbo Edit General v2): upload a picture in Image Studio, describe the change ("make the dog black") and the rest of the picture is kept.
+- **Prompt translation on your PC.** Prompts that are not in English are translated with the local Qwen3 model (llama.cpp) before generating, because image models understand English far better. Switch it on/off from the *Translate* button in the top bar; translations are cached on disk.
+- **Prompt Enhancer with AI.** Image Studio → Tools → *Enhance with AI* rewrites a short idea into a detailed English prompt with the same local model.
+- **A persistent Wan2GP server.** The app keeps one local Wan2GP process alive between generations, so a large model stays loaded instead of being reloaded for every image (it stops after 20 idle minutes and when you quit).
+- **History that survives a restart**, with search, thumbnails, "recover prompt", per-item delete, and *Clear history*. Generated files can be deleted individually or all at once (Settings shows the space they use).
+- **Right-click menus** on images, videos and text fields (copy, save as, paste, spelling suggestions), **click-to-zoom** on images, **copy / paste / drag-and-drop** of pictures into the prompt box and ArrowUp/ArrowDown through the last 10 prompts.
+- **Choose where the files go.** Settings → Local Models → *Change folder* moves the engine, the models and the outputs to another drive.
+- **MCP & CLI tab for any AI client.** Ready-to-paste MCP setups for Claude Code, Claude Desktop, Cursor, Windsurf, Gemini CLI, Cline / Roo Code and any other MCP client, plus a guide for using DeepSeek (through Claude Code's Anthropic-compatible endpoint or an MCP client that accepts any model).
+
+**Windows quick start:** see [Windows quick setup](#windows-quick-setup-this-fork). Requirements for the larger models: an NVIDIA GPU (12 GB+ VRAM for Krea 2 / Kroma / HiDream, 8 GB is enough for Ideogram v4 NF4 and the lighter models) and plenty of RAM (the Wan2GP models are quantized on the fly; 32-48 GB is comfortable).
+
 ## ⚡ Local Model Inference (Desktop App Only)
 
 The desktop app supports **two independent local engines**. Pick whichever fits the machine you actually run on:
@@ -254,7 +273,14 @@ Then switch **Video Studio** to **⚡ Local** and pick a model. Models your Wan2
 | **Hunyuan Video 1.5** | `hunyuan_1_5_480_t2v` | Video | 480p T2V |
 | **LTX-2 Distilled** | `ltx2_22B_distilled` | Video | 8 steps, 720p |
 | **Flux.1 Dev** | `flux` | Image | Image Studio |
-| **Qwen Image** | `qwen_image_20B` | Image | Image Studio |
+| **Qwen Image** / **Qwen Image 2.1 (7B, Turbo)** | `qwen_image_20B` / `qwen_image_21_7B` / `qwen_image_21_turbo_7B` | Image | Image Studio |
+| **Ideogram v4 NF4** | `ideogram4_nf4` | Image | Typography and layouts; needs `bitsandbytes` (the installer adds it) |
+| **Krea 2 Turbo** | `krea2_turbo` | Image | 8 steps, very aesthetic |
+| **Kroma v0.3.1 Turbo** | `krea2_turbo_kroma_v031` | Image | Krea 2 finetune by lodestones, ~26 GB; definition bundled in `electron/finetunes/` |
+| **Kroma Edit / Krea 2 Turbo Edit General v2** | `krea2_turbo_kroma_edit_v031` / `krea2_turbo_general_edit_v2` | Image edit | Change an uploaded picture with a prompt |
+| **HiDream O1 Dev** | `hidream_o1_dev_2604` | Image | 28 steps |
+| **Chroma Radiance** | `flux_chroma_radiance` | Image | Legacy: listed last on strong GPUs |
+| **InfiniteTalk** | `infinitetalk` | Lip sync | Portrait + audio, Lip Sync Studio |
 
 > **Why the remote option?** Wan2GP's runtime (Sage attention, flash-attn, AWQ/GGUF kernels) is CUDA/ROCm-only — there is no MPS / Apple Silicon path. The MCP server lets a Mac-only user keep the desktop app while offloading inference to a Linux/Windows GPU box, a gaming PC on the LAN, or a rented RunPod/vast.ai instance.
 

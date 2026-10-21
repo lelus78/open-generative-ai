@@ -9,6 +9,8 @@
 const REQUIREMENTS = {
     ideogram4_nf4:         { minVramGB: 8,  comfortVramGB: 12, minRamGB: 24, downloadGB: 14 },
     krea2_turbo_kroma_v031: { minVramGB: 12, comfortVramGB: 16, minRamGB: 48, downloadGB: 34 },
+    krea2_turbo_kroma_edit_v031: { minVramGB: 12, comfortVramGB: 16, minRamGB: 48, downloadGB: 6 },
+    krea2_turbo_general_edit_v2: { minVramGB: 12, comfortVramGB: 16, minRamGB: 32, downloadGB: 26 },
     krea2_turbo:           { minVramGB: 12, comfortVramGB: 16, minRamGB: 32, downloadGB: 22 },
     flux_chroma_radiance:  { minVramGB: 8,  comfortVramGB: 12, minRamGB: 24, downloadGB: 16 },
     hidream_o1_dev_2604:   { minVramGB: 12, comfortVramGB: 16, minRamGB: 32, downloadGB: 20 },
