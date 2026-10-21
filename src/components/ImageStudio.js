@@ -802,7 +802,7 @@ export function ImageStudio() {
     // 3. DROPDOWNS (Professional implementation)
     // ==========================================
     const dropdown = document.createElement('div');
-    dropdown.className = 'absolute bottom-[102%] left-2 z-50 transition-all opacity-0 pointer-events-none scale-95 origin-bottom-left glass rounded-3xl p-3 translate-y-2 w-[calc(100vw-3rem)] max-w-xs shadow-4xl border border-white/10 flex flex-col';
+    dropdown.className = 'absolute bottom-[102%] left-2 z-50 transition-all opacity-0 pointer-events-none scale-95 origin-bottom-left glass rounded-3xl p-3 translate-y-2 w-[calc(100vw-3rem)] max-w-sm shadow-4xl border border-white/10 flex flex-col';
 
     const showDropdown = (type, anchorBtn) => {
         dropdown.innerHTML = '';
@@ -853,7 +853,7 @@ export function ImageStudio() {
                                         ${m.featured ? '<span class="text-[9px] font-black px-1 py-0.5 rounded bg-primary/20 text-primary">FEATURED</span>' : ''}
                                         ${downloadedBadgeHtml(info)}${fitBadgeHtml(info)}
                                     </div>
-                                    <span class="text-[10px] text-muted">${m.type.toUpperCase()} · ${m.family}</span>
+                                    <span class="text-[10px] text-muted">${[m.type.toUpperCase(), m.family].filter(Boolean).join(' · ')}</span>
                                     ${blocked ? `<span class="text-[9px] text-yellow-400/80 leading-snug">${(info.unavailableReason || info.fitReason || '').replace(/[<>&]/g, '')}</span>` : ''}
                                 </div>
                             </div>
