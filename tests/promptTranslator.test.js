@@ -67,3 +67,10 @@ test('translations survive a restart (disk cache)', async () => {
     const r = await t.translateParams({ prompt: 'una cavalletta su una staccionata', seed: 7 });
     assert.equal(r.params.prompt, 'a grasshopper on a fence');
 });
+
+test('parseEnhancement strips labels, quotes and extra paragraphs', () => {
+    const { parseEnhancement } = require('../electron/lib/promptTranslator');
+    assert.equal(parseEnhancement('Prompt: "A fox in snow,\nsoft light." [end of text]'), 'A fox in snow, soft light.');
+    assert.equal(parseEnhancement('First paragraph.\n\nSecond one.'), 'First paragraph.');
+    assert.equal(parseEnhancement('  '), '');
+});

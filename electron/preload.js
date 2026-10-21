@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('localAI', {
     getBinaryStatus: () => ipcRenderer.invoke('local-ai:binary-status'),
     getHardware: () => ipcRenderer.invoke('local-ai:hardware'),
     translate: (text) => ipcRenderer.invoke('local-ai:translate', text),
+    enhancePrompt: (text) => ipcRenderer.invoke('local-ai:enhance-prompt', text),
     getSettings: () => ipcRenderer.invoke('local-ai:get-settings'),
     setSettings: (patch) => ipcRenderer.invoke('local-ai:set-settings', patch),
     pickStorageFolder: () => ipcRenderer.invoke('local-ai:pick-storage'),

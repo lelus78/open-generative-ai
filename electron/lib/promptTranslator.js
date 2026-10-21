@@ -45,8 +45,12 @@ function needsTranslation(text) {
 }
 
 /** ChatML prompt understood by Qwen models. */
-function buildChatPrompt(text) {
-    return `<|im_start|>system\n${SYSTEM_PROMPT}<|im_end|>\n<|im_start|>user\n${text}<|im_end|>\n<|im_start|>assistant\n`;
+const ENHANCE_SYSTEM_PROMPT = 'You rewrite short ideas into rich prompts for an AI image generator. Output only the final prompt in English, as one paragraph of 60 to 110 words. '
+    + 'Keep the subject and every detail the user gave; add concrete visual detail: setting, composition and camera angle, lighting, colours, mood, materials, style. '
+    + 'Do not add titles, labels, quotes, lists or explanations.';
+
+function buildChatPrompt(text, system = SYSTEM_PROMPT) {
+    return `<|im_start|>system\n${system}<|im_end|>\n<|im_start|>user\n${text}<|im_end|>\n<|im_start|>assistant\n`;
 }
 
 /** Clean the raw model output; returns '' when it cannot be trusted (caller keeps the original). */
@@ -61,6 +65,17 @@ function parseTranslation(output, original) {
     if (text.length > Math.max(200, original.length * 4)) return '';
     if (text.includes('\n\n')) text = text.split('\n\n')[0].trim();
     return text;
+}
+
+/** Clean the raw output of the enhancer; '' when unusable. */
+function parseEnhancement(output) {
+    const text = String(output || '')
+        .replace(/\[end of text\]/gi, '')
+        .replace(/<\|im_end\|>/g, '')
+        .replace(/^\s*(prompt|enhanced prompt)\s*:\s*/i, '')
+        .replace(/^\s*["'“”]+|["'“”]+\s*$/g, '')
+        .trim();
+    return text.split(/\n\s*\n/)[0].replace(/\s*\n\s*/g, ' ').trim();
 }
 
 function getJson(url) {
@@ -221,6 +236,21 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
         }
     }
 
+    /** Expand an idea into a detailed English prompt. Unlike translate(), problems are reported to the caller. */
+    async function enhance(text, onStatus) {
+        const idea = String(text || '').trim();
+        if (!idea) throw new Error('Write a prompt first.');
+        if (!fs.existsSync(modelPath())) throw new Error('The enhancer needs the Qwen3 text encoder: download Z-Image Turbo in Settings → Local Models first.');
+        enginePromise = enginePromise || ensureEngine(onStatus).finally(() => { enginePromise = null; });
+        const binary = await enginePromise;
+        onStatus?.('Enhancing the prompt…');
+        const args = ['-m', modelPath(), '--no-display-prompt', '--temp', '0.7', '-n', '260', '-ngl', '99', '-no-cnv', '-p', buildChatPrompt(idea, ENHANCE_SYSTEM_PROMPT)];
+        const out = await run(binary, args, { timeoutMs: 180000 });
+        const cleaned = parseEnhancement(out);
+        if (!cleaned) throw new Error('The model returned nothing usable — try again.');
+        return cleaned;
+    }
+
     /**
      * Returns params with prompt (and negative prompt) in English when they were not.
      * `translatedPrompt` is set only when something changed.
@@ -240,10 +270,11 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
     }
 
     return {
+        enhance,
         translateParams,
         getSettings: () => ({ ...readSettings(), engineInstalled: !!findEngine(), modelAvailable: fs.existsSync(modelPath()) }),
         setSettings: (patch) => writeSettings({ translatePrompts: !!patch.translatePrompts }),
     };
 }
 
-module.exports = { needsTranslation, buildChatPrompt, parseTranslation, pickAsset, createPromptTranslator, SYSTEM_PROMPT };
+module.exports = { needsTranslation, buildChatPrompt, parseTranslation, parseEnhancement, ENHANCE_SYSTEM_PROMPT, pickAsset, createPromptTranslator, SYSTEM_PROMPT };

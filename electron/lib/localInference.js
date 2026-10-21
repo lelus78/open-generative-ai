@@ -748,6 +748,7 @@ function register() {
         const { params, translatedPrompt } = await translatePrompts({ prompt: String(text || '') }, (d) => getMainWindow()?.webContents.send('local-ai:progress', d));
         return { text: params.prompt, translatedPrompt };
     });
+    ipcMain.handle('local-ai:enhance-prompt', (_, text) => getTranslator().enhance(text, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
     ipcMain.handle('local-ai:get-settings', () => getTranslator().getSettings());
     ipcMain.handle('local-ai:set-settings', (_, patch) => { getTranslator().setSettings(patch || {}); return getTranslator().getSettings(); });
     ipcMain.handle('local-ai:pick-storage', () => pickStorageFolder(getMainWindow()));
