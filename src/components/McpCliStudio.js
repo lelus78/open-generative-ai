@@ -1,5 +1,56 @@
 import { t } from '../lib/i18n.js';
 
+const MCP_URL = 'https://api.muapi.ai/mcp';
+const DEEPSEEK_ENV = 'export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic\nexport ANTHROPIC_AUTH_TOKEN=<your DeepSeek API key>\nclaude --model sonnet   # the endpoint maps the name to a DeepSeek model';
+
+const jsonBlock = (value) => JSON.stringify(value, null, 2);
+// Clients that only start local programs reach a remote server through the mcp-remote bridge.
+const bridged = (url, key) => ({ command: 'npx', args: ['-y', 'mcp-remote', url, '--header', `Authorization:Bearer ${key}`] });
+
+const MCP_CLIENTS = [
+    {
+        id: 'claude-code', label: 'Claude Code',
+        where: 'Run in a terminal',
+        build: (url, key) => `claude mcp add --transport http muapi ${url} \\\n  --header "Authorization: Bearer ${key}"`,
+        note: 'Works the same when Claude Code runs on a DeepSeek model (see below).',
+    },
+    {
+        id: 'claude-desktop', label: 'Claude Desktop',
+        where: 'claude_desktop_config.json, then restart Claude Desktop',
+        build: (url, key) => jsonBlock({ mcpServers: { muapi: bridged(url, key) } }),
+        note: 'Needs Node.js (for npx). Settings → Developer → Edit Config opens the file.',
+    },
+    {
+        id: 'cursor', label: 'Cursor',
+        where: '~/.cursor/mcp.json',
+        build: (url, key) => jsonBlock({ mcpServers: { muapi: { url, headers: { Authorization: `Bearer ${key}` } } } }),
+        note: 'If your Cursor version does not take url/headers, use the "Any MCP client" snippet.',
+    },
+    {
+        id: 'windsurf', label: 'Windsurf',
+        where: '~/.codeium/windsurf/mcp_config.json',
+        build: (url, key) => jsonBlock({ mcpServers: { muapi: bridged(url, key) } }),
+        note: 'Uses the mcp-remote bridge, which works in every Windsurf version.',
+    },
+    {
+        id: 'gemini', label: 'Gemini CLI',
+        where: '~/.gemini/settings.json',
+        build: (url, key) => jsonBlock({ mcpServers: { muapi: { httpUrl: url, headers: { Authorization: `Bearer ${key}` } } } }),
+    },
+    {
+        id: 'cline', label: 'Cline / Roo Code (any model, e.g. DeepSeek)',
+        where: 'MCP Servers → Configure MCP Servers (cline_mcp_settings.json)',
+        build: (url, key) => jsonBlock({ mcpServers: { muapi: bridged(url, key) } }),
+        note: 'Pick DeepSeek (or any other model) as the provider in the extension settings; the MCP server is independent of the model.',
+    },
+    {
+        id: 'generic', label: 'Any MCP client',
+        where: 'Add as a command-based (stdio) server',
+        build: (url, key) => `npx -y mcp-remote ${url} --header "Authorization:Bearer ${key}"`,
+        note: 'mcp-remote turns the hosted endpoint into a local stdio server, which every MCP client understands. No spaces after the colon in the header: some clients mangle them.',
+    },
+];
+
 export function McpCliStudio() {
     const container = document.createElement('div');
     container.className = 'w-full h-full overflow-y-auto bg-app-bg text-white';
@@ -91,6 +142,74 @@ export function McpCliStudio() {
     `;
     inner.appendChild(examples);
 
+    // Connect any AI client: one MCP endpoint, a ready-made config for each client
+    const connect = document.createElement('section');
+    connect.className = 'glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-6';
+    connect.innerHTML = `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-widest text-secondary">Connect your AI client</span>
+            <div class="flex-1 h-px bg-white/5"></div>
+        </div>
+        <p class="text-[13px] text-secondary leading-relaxed">
+            The MCP server is a standard remote (Streamable HTTP) endpoint, so it works with every MCP-capable client, whichever model runs behind it
+            (Claude, DeepSeek, GPT, Gemini, Qwen, local models...). Pick your client and paste the snippet.
+        </p>
+        <div class="flex flex-col md:flex-row gap-4 items-end">
+            <div class="flex flex-col gap-1.5 flex-1 w-full">
+                <label class="text-[11px] font-bold tracking-wider uppercase text-secondary">Client</label>
+                <select id="clientSelector" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30">
+                    ${MCP_CLIENTS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}
+                </select>
+            </div>
+            <div class="flex flex-col gap-1.5 flex-1 w-full">
+                <label class="text-[11px] font-bold tracking-wider uppercase text-secondary">API key (stays in this window, not saved)</label>
+                <input id="mcpKeyInput" type="text" autocomplete="off" spellcheck="false" placeholder="YOUR_KEY" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-white/30">
+            </div>
+        </div>
+        <div class="flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-3">
+                <span id="clientWhere" class="text-[12px] font-bold text-white/80"></span>
+                <button id="copyClientBtn" type="button" class="px-3 py-1 rounded-md text-[11px] font-bold bg-white/5 text-secondary hover:bg-white/10 hover:text-white transition-colors">Copy</button>
+            </div>
+            <pre id="clientSnippet" class="text-[12px] font-mono text-primary bg-black/60 border border-white/5 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre"></pre>
+            <p id="clientNote" class="text-[11px] text-secondary leading-relaxed"></p>
+        </div>
+        <div class="rounded-xl border border-white/5 bg-white/[0.02] p-5 flex flex-col gap-3">
+            <span class="text-sm font-bold">Using DeepSeek (or another non-Claude model)</span>
+            <p class="text-[12px] text-secondary leading-relaxed">
+                DeepSeek models do not speak MCP on their own: the MCP support lives in the client you run. Three ways, from easiest:
+            </p>
+            <ol class="text-[12px] text-secondary leading-relaxed list-decimal pl-5 flex flex-col gap-2">
+                <li><b class="text-white/80">Claude Code with the DeepSeek API.</b> DeepSeek offers an Anthropic-compatible endpoint; set it before starting Claude Code, then add the MCP server as above:
+                    <pre class="mt-1.5 text-[11px] font-mono text-primary bg-black/40 rounded-md px-3 py-2 overflow-x-auto whitespace-pre">${escapeHtml(DEEPSEEK_ENV)}</pre></li>
+                <li><b class="text-white/80">An MCP client that takes any model</b> (Cline, Roo Code, Continue, Cherry Studio, LibreChat): choose DeepSeek as the model with your DeepSeek API key, and add the MCP server from the snippet above.</li>
+                <li><b class="text-white/80">No MCP at all:</b> any agent that can run shell commands can call the CLI. Add <code class="text-primary">--output-json</code> and it returns clean JSON.</li>
+            </ol>
+        </div>
+    `;
+    inner.appendChild(connect);
+
+    const clientSel = connect.querySelector('#clientSelector');
+    const keyInput = connect.querySelector('#mcpKeyInput');
+    const whereEl = connect.querySelector('#clientWhere');
+    const snippetEl = connect.querySelector('#clientSnippet');
+    const noteEl = connect.querySelector('#clientNote');
+    const copyBtn = connect.querySelector('#copyClientBtn');
+    const renderClient = () => {
+        const client = MCP_CLIENTS.find(c => c.id === clientSel.value) || MCP_CLIENTS[0];
+        const out = client.build(MCP_URL, keyInput.value.trim() || 'YOUR_KEY');
+        whereEl.textContent = client.where;
+        snippetEl.textContent = out;
+        noteEl.textContent = client.note || '';
+    };
+    clientSel.addEventListener('change', renderClient);
+    keyInput.addEventListener('input', renderClient);
+    copyBtn.onclick = async () => {
+        try { await navigator.clipboard.writeText(snippetEl.textContent); copyBtn.textContent = 'Copied'; } catch { copyBtn.textContent = 'Select and copy manually'; }
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+    };
+    renderClient();
+
     // NEW FEATURE: Interactive Command Generator Playground
     const playground = document.createElement('section');
     playground.className = 'glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-6';
@@ -142,7 +261,7 @@ export function McpCliStudio() {
     // Footer note
     const footer = document.createElement('p');
     footer.className = 'text-center text-xs text-secondary opacity-60 pb-4';
-    footer.textContent = 'Open-source · MIT licensed · Works with Claude, Cursor, Windsurf, and Gemini CLI';
+    footer.textContent = 'Open-source · MIT licensed · Works with Claude, DeepSeek, Cursor, Windsurf, Gemini CLI, Cline and any MCP client';
     inner.appendChild(footer);
 
     return container;
