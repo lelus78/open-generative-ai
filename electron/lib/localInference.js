@@ -766,4 +766,9 @@ module.exports = {
     downloadFile,
     translatePrompts,
     getDataDir: () => DATA_DIR,
+    // used by the MCP server (mcpControl.js)
+    generate,
+    listModels,
+    cancelGeneration,
+    enhancePrompt: (text) => getTranslator().enhance(text),
 };

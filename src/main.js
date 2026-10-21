@@ -1,6 +1,7 @@
 import './style.css';
 import { Header } from './components/Header.js';
 import { ImageStudio } from './components/ImageStudio.js';
+import { initExternalResults } from './lib/externalResults.js';
 
 const app = document.querySelector('#app');
 let contentArea;
@@ -66,6 +67,7 @@ app.appendChild(contentArea);
 
 // Initial Route
 navigate('image');
+initExternalResults();
 
 // Event Listener for Navigation
 window.addEventListener('navigate', (e) => {

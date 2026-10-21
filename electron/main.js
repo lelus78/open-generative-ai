@@ -3,6 +3,7 @@ const path = require('path');
 const { register: registerLocalInference } = require('./lib/localInference');
 const { register: registerWan2gp } = require('./lib/wan2gpProvider');
 const { setupContextMenu } = require('./lib/contextMenu');
+const { register: registerMcpControl } = require('./lib/mcpControl');
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
@@ -76,6 +77,7 @@ app.whenReady().then(() => {
     try {
         registerLocalInference();
         registerWan2gp();
+        registerMcpControl();
     } catch (err) {
         console.error('Failed to register local-ai/wan2gp handlers:', err);
         dialog.showErrorBox(

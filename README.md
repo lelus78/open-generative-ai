@@ -21,7 +21,8 @@
 | **Speed** | A new Wan2GP process per generation: the model is read, quantized and loaded again every time. | One **persistent Wan2GP server**: the first image loads the model, the next ones start immediately (in my test the first edit took about 8 minutes, the next one 37 seconds). |
 | **History** | Lost on restart for local images; plain list. | **Survives restarts**, thumbnails, search, day groups, recover prompt, delete one or all (and the file on disk). |
 | **Usability** | — | Right-click menus, click-to-zoom, copy / paste / drag & drop pictures, ArrowUp for the last 10 prompts, a real progress phase (*downloading weights, translating, step n/N*), a folder picker for where the models go, Local/API choice remembered. |
-| **MCP & CLI tab** | Commands written for Claude. | Copy-paste setups for **Claude, Cursor, Windsurf, Gemini CLI, Cline, any MCP client** and a **DeepSeek** guide. |
+| **MCP & CLI tab** | Commands written for Claude, pointing at a cloud service. | Copy-paste setups for **Claude, Cursor, Windsurf, Gemini CLI, Cline, any MCP client** and a **DeepSeek** guide. |
+| **AI assistants controlling the app** | Not available. | A **local MCP server inside the app** (like the Blender MCP): Claude Code, Cursor or any MCP client can generate and edit images with your local models while the app is open, and the results appear in Image Studio. |
 
 ## See it
 
@@ -51,6 +52,16 @@ Settings → Local Models: your hardware, the Wan2GP install (one click), where 
 
 ### Connect any AI client (MCP & CLI)
 <p align="center"><img src="docs/images/mcp-connect.jpg" alt="MCP client setup generator" width="860"></p>
+
+### Let an AI assistant drive the app (MCP)
+Settings → Local Models → **Let AI assistants use this app (MCP)**. It is off by default; when on, the app listens on `127.0.0.1` only, needs a random token, and refuses browser requests. The settings show a ready command, for Claude Code:
+
+```bash
+claude mcp add --transport http open-generative-ai http://127.0.0.1:47821/mcp \
+  --header "Authorization: Bearer <token shown in Settings>"
+```
+
+Then ask your assistant things like *"generate a fox in the snow at sunset"* or *"make the dog in /path/dog.png black"*. It works with the app open, and what it makes shows up in Image Studio (and its history) while it works. Tools: `list_models`, `generate_image`, `edit_image`, `enhance_prompt`, `recent_results`, `cancel_generation`. Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. This is different from the cloud MCP server in the *MCP & CLI* tab, which runs on someone else's servers.
 
 ## What else changed
 

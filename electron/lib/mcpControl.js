@@ -1,0 +1,131 @@
+// Wires the MCP server into the app: settings (off by default), the engines behind the tools, and
+// the events that let the interface show what an assistant is doing.
+const { app, ipcMain, BrowserWindow } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { createHandler, start } = require('./mcpServer');
+const { createTools } = require('./mcpTools');
+const outputStore = require('./outputStore');
+
+const DEFAULT_PORT = 47821;
+const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'mcp-control.json');
+
+let server = null;
+let startError = null;
+
+function readSettings() {
+    let saved = {};
+    try { saved = JSON.parse(fs.readFileSync(SETTINGS_FILE(), 'utf-8')); } catch { /* first run */ }
+    const settings = {
+        enabled: !!saved.enabled,
+        port: Number.isInteger(saved.port) && saved.port > 1023 && saved.port < 65536 ? saved.port : DEFAULT_PORT,
+        token: typeof saved.token === 'string' && saved.token.length >= 32 ? saved.token : crypto.randomBytes(24).toString('hex'),
+    };
+    if (saved.token !== settings.token || saved.enabled !== settings.enabled || saved.port !== settings.port) writeSettings(settings);
+    return settings;
+}
+
+function writeSettings(settings) {
+    fs.mkdirSync(path.dirname(SETTINGS_FILE()), { recursive: true });
+    fs.writeFileSync(SETTINGS_FILE(), JSON.stringify(settings, null, 2));
+}
+
+const getMainWindow = () => BrowserWindow.getAllWindows()[0] || null;
+
+/** One list of local models from both engines, in the shape the tools expect. */
+async function listModels() {
+    const sd = require('./localInference');
+    const wan2gp = require('./wan2gpProvider');
+    const [sdModels, wanModels] = await Promise.all([sd.listModels().catch(() => []), wan2gp.listModels().catch(() => [])]);
+
+    const fromSd = sdModels.map(m => {
+        const downloaded = m.state === 'downloaded';
+        const unfit = m.fit === 'unfit';
+        return {
+            id: m.id, name: m.name, engine: 'sd.cpp', kind: 'image', fit: m.fit, legacy: !!m.legacy,
+            downloaded,
+            ready: downloaded && !unfit,
+            reason: unfit ? m.fitReason : (!downloaded ? 'not downloaded — download it in Settings → Local Models' : ''),
+        };
+    });
+    const fromWan = wanModels.map(m => ({
+        id: m.id, name: m.name, engine: 'Wan2GP', fit: m.fit, legacy: !!m.legacy,
+        kind: m.lipsync ? 'lipsync' : m.type === 'video' ? 'video' : m.edit ? 'edit' : 'image',
+        downloaded: !!m.downloaded,
+        ready: !!m.ready && !!m.downloaded,
+        reason: m.unavailableReason || (m.ready && !m.downloaded ? 'not downloaded yet — generate once from the app (or download it in Settings) first' : ''),
+    }));
+    return [...fromSd, ...fromWan];
+}
+
+function buildDeps() {
+    const sd = require('./localInference');
+    const wan2gp = require('./wan2gpProvider');
+    return {
+        listModels,
+        generate: (params) => (String(params.model).startsWith('wan2gp:')
+            ? wan2gp.generate(params, getMainWindow())
+            : sd.generate(params, getMainWindow())),
+        enhance: (text) => sd.enhancePrompt(text),
+        cancel: () => { try { sd.cancelGeneration(); } catch { /* idle */ } try { wan2gp.cancelGeneration(); } catch { /* idle */ } },
+        recent: (limit) => outputStore.recentResults(wan2gp.getRunsDir(), limit),
+        notify: (event) => getMainWindow()?.webContents.send('local-ai:external', event),
+    };
+}
+
+async function startServer(settings) {
+    await stopServer();
+    startError = null;
+    const handle = createHandler({ name: 'open-generative-ai', version: app.getVersion(), tools: createTools(buildDeps()) });
+    try {
+        server = await start({ port: settings.port, token: settings.token, handle });
+    } catch (err) {
+        server = null;
+        startError = err.code === 'EADDRINUSE' ? `Port ${settings.port} is already in use.` : err.message;
+    }
+}
+
+function stopServer() {
+    return new Promise((resolve) => {
+        if (!server) return resolve();
+        const closing = server;
+        server = null;
+        closing.close(() => resolve());
+        closing.closeAllConnections?.();
+    });
+}
+
+function status(settings = readSettings()) {
+    const url = `http://127.0.0.1:${settings.port}/mcp`;
+    return {
+        enabled: settings.enabled,
+        running: !!server,
+        error: startError,
+        port: settings.port,
+        url,
+        token: settings.token,
+        command: `claude mcp add --transport http open-generative-ai ${url} --header "Authorization: Bearer ${settings.token}"`,
+    };
+}
+
+function register() {
+    ipcMain.handle('mcp:get', () => status());
+    ipcMain.handle('mcp:set', async (_, patch = {}) => {
+        const current = readSettings();
+        const next = {
+            ...current,
+            ...(typeof patch.enabled === 'boolean' ? { enabled: patch.enabled } : {}),
+            ...(patch.regenerateToken ? { token: crypto.randomBytes(24).toString('hex') } : {}),
+        };
+        writeSettings(next);
+        if (next.enabled) await startServer(next); else { await stopServer(); startError = null; }
+        return status(next);
+    });
+
+    const settings = readSettings();
+    if (settings.enabled) startServer(settings).catch((err) => console.error('[mcp] could not start:', err));
+    app.on('before-quit', () => { stopServer(); });
+}
+
+module.exports = { register, listModels };

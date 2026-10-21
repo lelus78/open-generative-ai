@@ -437,6 +437,47 @@ export function LocalModelManager() {
     engineSection.appendChild(wan2gpBar);
     root.appendChild(engineSection);
 
+    // ── Section: AI assistants (MCP) ──────────────────────────────────────────
+    if (window.localAI?.mcp) {
+        const mcpSection = document.createElement('div');
+        mcpSection.className = 'flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-3';
+        mcpSection.innerHTML = `
+            <label class="flex items-start gap-2 text-[11px] text-white/80 cursor-pointer">
+                <input id="mcp-enable" type="checkbox" class="mt-0.5 accent-cyan-400">
+                <span>Let AI assistants use this app (MCP)<span class="block text-[10px] text-muted">Claude Code, Cursor or any MCP client can generate and edit images with your local models while this app is open, and the results show up in Image Studio. It listens only on this PC and needs the token below.</span></span>
+            </label>
+            <div id="mcp-details" class="hidden flex-col gap-2">
+                <div id="mcp-status" class="text-[10px]"></div>
+                <pre id="mcp-command" class="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/40 px-3 py-2 text-[10px] font-mono text-primary"></pre>
+                <div class="flex gap-2">
+                    <button id="mcp-copy" class="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-white/5 transition-colors">Copy command (Claude Code)</button>
+                    <button id="mcp-newtoken" class="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-secondary hover:bg-white/5 transition-colors">New token</button>
+                </div>
+            </div>
+        `;
+        root.appendChild(mcpSection);
+        const enableEl = mcpSection.querySelector('#mcp-enable');
+        const detailsEl = mcpSection.querySelector('#mcp-details');
+        const statusEl = mcpSection.querySelector('#mcp-status');
+        const commandEl = mcpSection.querySelector('#mcp-command');
+        const copyBtn = mcpSection.querySelector('#mcp-copy');
+        const renderMcp = (st) => {
+            enableEl.checked = st.enabled;
+            detailsEl.classList.toggle('hidden', !st.enabled);
+            detailsEl.classList.toggle('flex', st.enabled);
+            statusEl.textContent = st.error ? `Could not start: ${st.error}` : (st.running ? `Running at ${st.url}` : 'Starting…');
+            statusEl.className = `text-[10px] ${st.error ? 'text-red-400' : 'text-green-400'}`;
+            commandEl.textContent = st.command;
+        };
+        window.localAI.mcp.get().then(renderMcp).catch(() => {});
+        enableEl.onchange = async () => renderMcp(await window.localAI.mcp.set({ enabled: enableEl.checked }));
+        mcpSection.querySelector('#mcp-newtoken').onclick = async () => renderMcp(await window.localAI.mcp.set({ regenerateToken: true }));
+        copyBtn.onclick = async () => {
+            try { await navigator.clipboard.writeText(commandEl.textContent); copyBtn.textContent = 'Copied'; } catch { copyBtn.textContent = 'Select and copy manually'; }
+            setTimeout(() => { copyBtn.textContent = 'Copy command (Claude Code)'; }, 1500);
+        };
+    }
+
     // ── Section: models
     const modelsSection = document.createElement('div');
     modelsSection.className = 'flex flex-col gap-3';

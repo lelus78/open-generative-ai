@@ -47,6 +47,16 @@ contextBridge.exposeInMainWorld('localAI', {
         ipcRenderer.on('local-ai:progress', listener);
         return () => ipcRenderer.removeListener('local-ai:progress', listener);
     },
+    // What an AI assistant connected through MCP is doing: { phase: 'start' | 'result' | 'error', ... }
+    onExternal: (callback) => {
+        const listener = (_, data) => callback(data);
+        ipcRenderer.on('local-ai:external', listener);
+        return () => ipcRenderer.removeListener('local-ai:external', listener);
+    },
+    mcp: {
+        get: () => ipcRenderer.invoke('mcp:get'),
+        set: (patch) => ipcRenderer.invoke('mcp:set', patch),
+    },
     onDownloadProgress: (callback) => {
         const listener = (_, data) => callback(data);
         ipcRenderer.on('local-ai:download-progress', listener);

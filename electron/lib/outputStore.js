@@ -51,4 +51,24 @@ function clearAll({ runsDir, inputsDir }) {
     return { freedBytes };
 }
 
-module.exports = { dirSize, usage, deleteRunContaining, clearAll };
+/** Newest generated media files under runsDir (a run is a folder with the result inside). */
+function recentResults(runsDir, limit = 10) {
+    const found = [];
+    const walk = (dir, depth) => {
+        let entries;
+        try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) { if (depth < 3) walk(full, depth + 1); continue; }
+            if (!/\.(png|jpe?g|webp|mp4|webm|mkv|mov)$/i.test(entry.name)) continue;
+            try { found.push({ path: full, mtime: fs.statSync(full).mtimeMs }); } catch { /* removed meanwhile */ }
+        }
+    };
+    walk(runsDir, 0);
+    return found
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, limit)
+        .map(f => ({ path: f.path, modifiedAt: new Date(f.mtime).toISOString() }));
+}
+
+module.exports = { dirSize, usage, deleteRunContaining, clearAll, recentResults };

@@ -12,6 +12,7 @@ import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
 import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { takeEntryToShow } from '../lib/externalResults.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
@@ -1174,9 +1175,22 @@ export function ImageStudio() {
             historySidebar.classList.remove('translate-x-full', 'opacity-0');
             historySidebar.classList.add('translate-x-0', 'opacity-100');
             renderHistory();
-            hydrateHistory(generationHistory, 'muapi_history', 50, renderHistory);
+            const externalId = takeEntryToShow();
+            hydrateHistory(generationHistory, 'muapi_history', 50, () => {
+                renderHistory();
+                // A result an assistant just made through MCP: show it on screen, not only in the list.
+                const made = externalId && generationHistory.find(e => e.id === externalId);
+                if (made?.url) showImageInCanvas(made.url);
+            });
         }
     } catch (e) { /* ignore */ }
+
+    // Results made by an AI assistant through MCP appear here live (see src/lib/externalResults.js).
+    window.addEventListener('local-ai:external-result', (e) => {
+        e.detail.handled = true;
+        addToHistory(e.detail.entry);
+        showImageInCanvas(e.detail.entry.url);
+    });
 
     // --- Resume any pending image generations from a previous session ---
     (async () => {
