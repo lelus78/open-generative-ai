@@ -549,7 +549,7 @@ export function ImageStudio() {
                 advancedPanel.classList.remove('hidden');
             }
         }
-        document.getElementById('tools-btn-label').textContent = showToolsPanel ? 'Tools' : 'Tools';
+        if (showToolsPanel) updateEnhancedPrompt();
     };
     
     toolsBtn.onclick = toggleTools;
@@ -578,7 +578,8 @@ export function ImageStudio() {
     
     // Update enhanced prompt display
     const updateEnhancedPrompt = () => {
-        const base = basePromptInput?.value?.trim() || '';
+        // With no base typed here, enhance what is already in the main prompt box (never throw it away).
+        const base = basePromptInput?.value?.trim() || textarea.value.trim();
         const tags = Array.from(enhanceSelectedTags).join(', ');
         const enhanced = [base, tags].filter(p => p).join(', ');
         if (enhancedPromptDisplay) {
@@ -591,6 +592,7 @@ export function ImageStudio() {
     if (basePromptInput) {
         basePromptInput.oninput = updateEnhancedPrompt;
     }
+    textarea.addEventListener('input', updateEnhancedPrompt);
     
     // Enhance tag buttons
     const enhanceTagBtns = toolsPanel.querySelectorAll('.enhance-tag-btn');
@@ -633,6 +635,8 @@ export function ImageStudio() {
                 textarea.style.height = 'auto';
                 const maxHeight = window.innerWidth < 768 ? 150 : 250;
                 textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
+                // The tags are now part of the prompt: unselect them so reopening does not add them twice.
+                enhanceTagBtns.forEach(b => { if (enhanceSelectedTags.has(b.dataset.tag)) b.click(); });
                 // Close tools panel after use
                 showToolsPanel = false;
                 toolsPanel.classList.add('hidden');
