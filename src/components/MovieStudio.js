@@ -169,8 +169,8 @@ export function MovieStudio() {
                     <audio class="mv-music-audio hidden h-8 w-full" controls preload="none"></audio>
                     <p class="text-[11px] text-secondary">The music is looped or cut to the movie length and fades out at the end.</p>
                 </div>
-                <div class="rounded-xl border border-white/10 bg-white/[0.03] p-3 flex flex-col gap-2">
-                    <span class="text-xs font-bold text-secondary">Bring pictures to life (local AI, Wan2GP)</span>
+                <div class="mv-animate-panel rounded-xl border border-white/10 bg-white/[0.03] p-3 flex flex-col gap-2">
+                    <span class="text-xs font-bold text-secondary">Animate still pictures (Wan2GP) <span class="font-normal">— only for picture scenes; shots made with MiniMax H3 are already video</span></span>
                     <div class="grid grid-cols-2 gap-2">
                         <label class="flex flex-col gap-1 text-xs text-secondary col-span-2">Image-to-video model
                             <select class="mv-animate-model rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white"></select></label>
@@ -275,7 +275,17 @@ export function MovieStudio() {
         const t = state.transition === 'none' ? 0 : Math.min(state.transitionSeconds, Math.min(...lengths) / 2 - 0.05);
         return Math.max(0, lengths.reduce((a, b) => a + b, 0) - Math.max(0, t) * (lengths.length - 1));
     }
+    // The Wan2GP animation settings only matter for still pictures, or when the director animates pictures itself.
+    function syncAnimatePanel() {
+        const panel = inner.querySelector('.mv-animate-panel');
+        if (!panel) return;
+        let animating = false;
+        try { animating = dir.engine.value === 'animate'; } catch { /* the director panel is not ready yet */ }
+        const needed = animating || state.scenes.some((s) => s.kind === 'image');
+        panel.classList.toggle('hidden', !needed);
+    }
     function renderTotal() {
+        syncAnimatePanel();
         const total = totalSeconds();
         els.total.textContent = state.scenes.length ? `${state.scenes.length} scene${state.scenes.length === 1 ? '' : 's'} · about ${fmtTime(total)}` : 'No scenes yet. Add clips or pictures above.';
         els.render.disabled = rendering || !status?.ok || !state.scenes.length || !!animatingId;
@@ -1107,7 +1117,7 @@ export function MovieStudio() {
     };
     dir.stop.onclick = () => { stopDirector = true; dirStatus('Stopping after the current step…'); window.localAI.cancelGeneration(); window.localAI.wan2gp.cancelGeneration(); };
     dir.shotSec.oninput = () => { dir.shotSecLabel.textContent = dir.shotSec.value; };
-    dir.engine.onchange = () => { renderShots(); renderRefsBox(); };
+    dir.engine.onchange = () => { renderShots(); renderRefsBox(); syncAnimatePanel(); };
     dir.addRef.onclick = () => openHistoryPicker('Choose a reference picture', async (list) => {
         for (const e of list) {
             if (director.refs.length >= 4) { showError('At most 4 reference pictures fit.'); break; }
