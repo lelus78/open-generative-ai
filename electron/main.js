@@ -4,6 +4,7 @@ const { register: registerLocalInference } = require('./lib/localInference');
 const { register: registerWan2gp } = require('./lib/wan2gpProvider');
 const { register: registerComfyH3 } = require('./lib/comfyH3');
 const { register: registerMovie } = require('./lib/movieMaker');
+const { register: registerOutputFolders } = require('./lib/outputFolders');
 const { register: registerDebug } = require('./lib/debugIpc');
 const { shared: debugLog } = require('./lib/debugLog');
 const { setupContextMenu } = require('./lib/contextMenu');
@@ -95,6 +96,7 @@ app.whenReady().then(() => {
         registerWan2gp();
         registerComfyH3();
         registerMovie();
+        registerOutputFolders();
         registerMcpControl();
     } catch (err) {
         console.error('Failed to register local-ai/wan2gp handlers:', err);

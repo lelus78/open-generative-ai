@@ -81,6 +81,12 @@ contextBridge.exposeInMainWorld('localAI', {
         },
     },
 
+    // ── Result folders: open them in the file explorer ('media' | 'anime' | 'movies' | 'all') ──
+    outputs: {
+        paths: () => ipcRenderer.invoke('outputs:paths'),
+        open:  (kind) => ipcRenderer.invoke('outputs:open', kind),
+    },
+
     // ── Movie maker: join clips and pictures into one finished movie (ffmpeg, local) ──
     movie: {
         status:  () => ipcRenderer.invoke('movie:status'),

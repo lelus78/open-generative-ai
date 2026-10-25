@@ -108,9 +108,39 @@ export function Header(navigate) {
     debugBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M19 7l-3 2M5 7l3 2M19 19l-3-2M5 19l3-2M20 13h-4M4 13h4M10 2l1 2M14 2l-1 2"/></svg>';
     debugBtn.onclick = openDebugPanel;
 
+    // Result folders (desktop app): where the pictures, clips and movies are saved, one click away.
+    const foldersWrap = document.createElement('div');
+    foldersWrap.className = 'relative';
+    const foldersBtn = document.createElement('button');
+    foldersBtn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all';
+    foldersBtn.title = 'Open the folder where results are saved';
+    foldersBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="hidden xl:inline">Folders</span>';
+    const foldersMenu = document.createElement('div');
+    foldersMenu.className = 'hidden absolute right-0 top-full mt-2 w-72 rounded-xl border border-white/10 bg-[#14141a] shadow-2xl p-1.5 z-50 flex flex-col';
+    const folderItems = [
+        ['media', 'Images and videos', 'Image, Video, Cinema and Lip Sync results'],
+        ['anime', 'Anime (H3) clips', 'Clips made with MiniMax H3, also by the AI director'],
+        ['movies', 'Finished movies', 'Movies made in the Movie tab'],
+        ['all', 'All local files', 'Everything the app keeps (results, models, tools)'],
+    ];
+    for (const [kind, label, hint] of folderItems) {
+        const item = document.createElement('button');
+        item.className = 'text-left px-3 py-2 rounded-lg hover:bg-white/10 flex flex-col';
+        item.innerHTML = `<span class="text-[13px] font-bold text-white">${label}</span><span class="text-[11px] text-white/50">${hint}</span>`;
+        item.onclick = async () => {
+            foldersMenu.classList.add('hidden');
+            try { await window.localAI.outputs.open(kind); } catch (err) { alert(err.message); }
+        };
+        foldersMenu.appendChild(item);
+    }
+    foldersBtn.onclick = (e) => { e.stopPropagation(); foldersMenu.classList.toggle('hidden'); };
+    document.addEventListener('click', () => foldersMenu.classList.add('hidden'));
+    foldersWrap.append(foldersBtn, foldersMenu);
+
     const translateBtn = createTranslateToggle({ compact: true });
     if (translateBtn) rightPart.appendChild(translateBtn);
     rightPart.appendChild(langBtn);
+    if (window.localAI?.outputs) rightPart.appendChild(foldersWrap);
     if (isDebugAvailable()) rightPart.appendChild(debugBtn);
     rightPart.appendChild(settingsBtn);
 
