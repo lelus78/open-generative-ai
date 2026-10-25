@@ -85,6 +85,7 @@ contextBridge.exposeInMainWorld('localAI', {
     outputs: {
         paths: () => ipcRenderer.invoke('outputs:paths'),
         open:  (kind) => ipcRenderer.invoke('outputs:open', kind),
+        saveCopy: (file, name) => ipcRenderer.invoke('outputs:save-copy', file, name),
     },
 
     // ── Movie maker: join clips and pictures into one finished movie (ffmpeg, local) ──

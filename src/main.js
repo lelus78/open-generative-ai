@@ -61,6 +61,10 @@ function navigate(page) {
       import('./components/LipSyncStudio.js').then(({ LipSyncStudio }) => {
         wrapper.appendChild(LipSyncStudio());
       });
+    } else if (page === 'music') {
+      import('./components/MusicStudio.js').then(({ MusicStudio }) => {
+        wrapper.appendChild(MusicStudio());
+      });
     } else if (page === 'movie') {
       import('./components/MovieStudio.js').then(({ MovieStudio }) => {
         wrapper.appendChild(MovieStudio());

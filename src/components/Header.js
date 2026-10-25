@@ -36,6 +36,7 @@ export function Header(navigate) {
         { label: t('nav.lipsync'), page: 'lipsync' },
         ...(window.localAI?.h3 ? [{ label: t('nav.anime'), page: 'anime' }] : []),
         ...(window.localAI?.movie ? [{ label: t('nav.movie'), page: 'movie' }] : []),
+        ...(window.localAI?.wan2gp ? [{ label: t('nav.music'), page: 'music' }] : []),
         { label: t('nav.cinema'),  page: 'cinema' },
         { label: t('nav.workflows'), page: 'workflows' },
         { label: t('nav.agents'),  page: 'agents' },

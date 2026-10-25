@@ -1154,6 +1154,7 @@ export function MovieStudio() {
         const resolved = [];
         for (const item of items) {
             try {
+                if (item.kind === 'audio' && item.path) { state.music = item.path; persist(); renderMusic(); continue; } // from the Music tab
                 if (item.path) { resolved.push({ path: item.path, kind: item.kind, prompt: item.prompt }); continue; }
                 const blob = await (await fetch(item.url)).blob();
                 const saved = await api().importBytes({ name: `image.${(blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, type: blob.type, bytes: new Uint8Array(await blob.arrayBuffer()) });
