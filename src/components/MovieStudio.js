@@ -92,7 +92,6 @@ export function MovieStudio() {
                 <label class="flex items-center gap-2"><input type="checkbox" class="mv-opt-titles accent-primary" checked> Opening and closing title cards</label>
                 <label class="flex items-center gap-2"><input type="checkbox" class="mv-opt-sfx accent-primary" checked> Sound effects</label>
                 <label class="flex items-center gap-2"><input type="checkbox" class="mv-opt-music accent-primary" checked> Music</label>
-                <label class="flex items-center gap-2" title="The last frame of the previous shot becomes a reference of the next one. Useful for ONE continuous action, but the new shot tends to drift back to that picture, so it is off by default and not good for cuts to a new action (MiniMax H3 only)"><input type="checkbox" class="mv-opt-continuity accent-primary"> Continue each shot from the previous one (experimental)</label>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <label class="flex flex-col gap-1 text-xs text-secondary md:col-span-2">How the shots are made
@@ -868,7 +867,7 @@ export function MovieStudio() {
     let stopDirector = false;
     const dir = {
         idea: $('.mv-idea'), n: $('.mv-shots-n'), style: $('.mv-style'), model: $('.mv-pic-model'), titles: $('.mv-opt-titles'), sfx: $('.mv-opt-sfx'),
-        music: $('.mv-opt-music'), continuity: $('.mv-opt-continuity'), engine: $('.mv-engine'), shotSec: $('.mv-shot-sec'), quality: $('.mv-shot-quality'), shotSecLabel: $('.mv-shot-sec-label'), refs: $('.mv-refs'), addRef: $('.mv-add-ref'), write: $('.mv-write'), produce: $('.mv-produce'), stop: $('.mv-dir-stop'),
+        music: $('.mv-opt-music'), engine: $('.mv-engine'), shotSec: $('.mv-shot-sec'), quality: $('.mv-shot-quality'), shotSecLabel: $('.mv-shot-sec-label'), refs: $('.mv-refs'), addRef: $('.mv-add-ref'), write: $('.mv-write'), produce: $('.mv-produce'), stop: $('.mv-dir-stop'),
         status: $('.mv-dir-status'), shots: $('.mv-shots'),
     };
     try { dir.idea.value = localStorage.getItem('movie-idea') || ''; } catch { /* storage unavailable */ }
@@ -954,6 +953,16 @@ export function MovieStudio() {
                     row.appendChild(label);
                 });
                 card.appendChild(row);
+                if (i > 0) {
+                    const cont = document.createElement('label');
+                    cont.className = 'flex items-center gap-1.5 text-[11px] text-secondary';
+                    cont.title = 'Starts from the last frame of the previous shot. Good for ONE continuous action; the new shot tends to drift back to that picture, so leave it off for a cut to a new action.';
+                    cont.innerHTML = '<input type="checkbox" class="accent-primary"> continue from the previous shot (experimental)';
+                    const box = cont.querySelector('input');
+                    box.checked = !!shot.continue;
+                    box.onchange = () => { shot.continue = box.checked; saveDirector(); };
+                    card.appendChild(cont);
+                }
             }
             for (const [key, label] of [['image', 'Picture prompt'], ['motion', 'Motion'], ['caption', 'Caption'], ['sound', 'Sound effect']]) {
                 const input = document.createElement('input');
@@ -1019,7 +1028,7 @@ export function MovieStudio() {
                     const picked = (Array.isArray(shot.refs) && shot.refs.length ? shot.refs : director.refs.map((_, k) => k)).filter((k) => director.refs[k]).slice(0, 4);
                     const base = picked.map((k) => director.refs[k]).map((r) => ({ path: r.path, role: r.role, name: refName(r, director.refs.indexOf(r)), sheet: !!r.sheet }));
                     let frame = null;
-                    if (dir.continuity.checked && previousClip) { try { frame = (await api().lastFrame(previousClip)).path; } catch { /* no frame: the shot is made without it */ } }
+                    if (shot.continue && previousClip) { try { frame = (await api().lastFrame(previousClip)).path; } catch { /* no frame: the shot is made without it */ } }
                     const refs = mergeContinuityRef(base, frame);
                     const story = withContinuityStory([shot.image, shot.motion].filter(Boolean).join(' '), refs);
                     dirStatus(`Shot ${i + 1}/${total}: starting ComfyUI / MiniMax H3…`);
@@ -1041,6 +1050,7 @@ export function MovieStudio() {
                     checkStop();
                     const [info] = await api().probe([result.path]);
                     scene = { id: newId(), path: result.path, kind: 'video', duration: info?.duration || Number(dir.shotSec.value) || 6, motion: 'none', caption: shot.caption || '', prompt: shot.motion || '', trimEnd: 0, label: `Shot ${i + 1}`, sfxPrompt: shot.sound || '',
+                        continuity: !!shot.continue,
                         gen: { engine: 'h3', story: [shot.image, shot.motion].filter(Boolean).join(' '), style: dir.style.value, sound: shot.sound || '', seconds: Number(dir.shotSec.value) || 6, refs: base } };
                     scene.thumb = await api().url(result.path);
                     previousClip = result.path;
