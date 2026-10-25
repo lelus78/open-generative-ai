@@ -4,6 +4,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
+const { shared: debug, gpuSnapshot } = require('./debugLog');
 const { getHardwareProfile } = require('./hardwareProfile');
 const { createPromptTranslator } = require('./promptTranslator');
 const {
@@ -581,8 +582,13 @@ async function generate(params, mainWindow) {
         if (!fs.existsSync(vaePath)) throw new Error('VAE (ae.safetensors) not downloaded. Go to Settings > Local Models and download all required files for Z-Image.');
     }
 
+    const originalPrompt = params.prompt;
     const translated = await translatePrompts(params, send);
     params = translated.params;
+    debug.info('image', 'prompt for the model', {
+        model: model.id, original: originalPrompt, sent: params.prompt,
+        translated: originalPrompt !== params.prompt, aspect: params.aspect_ratio, seed: params.seed, steps: params.steps,
+    });
 
     const [width, height] = arToDimensions(params.aspect_ratio || '1:1', model.type);
     const seed = params.seed && params.seed !== -1 ? params.seed : Math.floor(Math.random() * 2147483647);
@@ -656,6 +662,7 @@ async function generate(params, mainWindow) {
         }, 5000);
 
         console.log('[sd-cli] command:', BINARY_PATH, args.join(' '));
+        debug.info('image', 'sd-cli started', { command: `${path.basename(BINARY_PATH)} ${args.join(' ')}` });
         // DYLD_LIBRARY_PATH lets macOS find libstable-diffusion.dylib next to sd-cli
         const spawnEnv = { ...process.env, DYLD_LIBRARY_PATH: BIN_DIR, LD_LIBRARY_PATH: BIN_DIR };
         cancelRequested = false;
@@ -682,6 +689,12 @@ async function generate(params, mainWindow) {
             activeProcess = null;
             const allOutput = outputLines.filter(l => l.trim()).join('\n');
             console.error('[sd-cli] full output:\n' + allOutput);
+            const elapsed = Date.now() - startupStartedAt;
+            if (cancelRequested) debug.info('image', 'cancelled by the user', { ms: elapsed });
+            else if (code !== 0) {
+                debug.error('image', 'sd-cli FAILED', { code, ms: elapsed, tail: outputLines.filter(l => l.trim()).slice(-12).join('\n') });
+                gpuSnapshot().then((gpu) => debug.error('image', 'GPU memory when it failed', gpu));
+            } else debug.info('image', 'sd-cli finished', { ms: elapsed });
             if (cancelRequested) {
                 reject(new Error('Generation cancelled'));
                 return;
@@ -749,6 +762,19 @@ function register() {
         return { text: params.prompt, translatedPrompt };
     });
     ipcMain.handle('local-ai:enhance-prompt', (_, text) => getTranslator().enhance(text, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
+    ipcMain.handle('local-ai:suggest-stories', (_, request) => getTranslator().stories(request || {}, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
+    ipcMain.handle('local-ai:storyboard', (_, request) => getTranslator().storyboard(request || {}, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
+    ipcMain.handle('local-ai:prompt-variants', (_, text, count) => getTranslator().variants(text, count, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
+    ipcMain.handle('local-ai:pick-writer-model', async () => {
+        const res = await dialog.showOpenDialog(getMainWindow(), {
+            title: 'Choose a GGUF language model (ChatML, e.g. an uncensored Qwen3 4B)',
+            properties: ['openFile'],
+            filters: [{ name: 'GGUF model', extensions: ['gguf'] }],
+        });
+        if (res.canceled || !res.filePaths[0]) return getTranslator().getSettings();
+        getTranslator().setSettings({ writerModel: res.filePaths[0] });
+        return getTranslator().getSettings();
+    });
     ipcMain.handle('local-ai:get-settings', () => getTranslator().getSettings());
     ipcMain.handle('local-ai:set-settings', (_, patch) => { getTranslator().setSettings(patch || {}); return getTranslator().getSettings(); });
     ipcMain.handle('local-ai:pick-storage', () => pickStorageFolder(getMainWindow()));

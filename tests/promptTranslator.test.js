@@ -74,3 +74,23 @@ test('parseEnhancement strips labels, quotes and extra paragraphs', () => {
     assert.equal(parseEnhancement('First paragraph.\n\nSecond one.'), 'First paragraph.');
     assert.equal(parseEnhancement('  '), '');
 });
+
+test('storyboard request and parser', () => {
+    const { buildStoryboardRequest, parseStoryboard } = require('../electron/lib/promptTranslator');
+    assert.match(buildStoryboardRequest({ idea: 'Un gatto  esploratore', scenes: 4, style: 'anime', aspect: '9:16' }), /N = 4\nVisual style: anime\nPicture format: 9:16\nIdea: Un gatto esploratore/);
+    const out = [
+        '<think>\n\n</think>',
+        'TITLE: **Il gatto e la luna**',
+        'MUSIC: Calm ambient piano, 70 BPM, soft pads, instrumental',
+        '1. IMAGE: A ginger cat on a rooftop at dusk, wide shot, warm light, anime style || MOTION: slow push in, the cat looks up || CAPTION: Una sera qualunque || SOUND: soft wind, distant city',
+        '2. **IMAGE:** The same ginger cat leaps across a moonlit gap between roofs || **MOTION:** tracking shot || **CAPTION:** - || **SOUND:** none',
+        'junk line',
+        '3. IMAGE: short',
+    ].join('\n');
+    const sb = parseStoryboard(out);
+    assert.equal(sb.title, 'Il gatto e la luna');
+    assert.equal(sb.music, 'Calm ambient piano, 70 BPM, soft pads, instrumental');
+    assert.equal(sb.scenes.length, 2);
+    assert.deepEqual(sb.scenes[0], { image: 'A ginger cat on a rooftop at dusk, wide shot, warm light, anime style', motion: 'slow push in, the cat looks up', caption: 'Una sera qualunque', sound: 'soft wind, distant city' });
+    assert.deepEqual([sb.scenes[1].caption, sb.scenes[1].sound], ['', '']);
+});

@@ -8,6 +8,7 @@ import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
+import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
 
 // Promotes a wan2gp catalog entry (lib/localModels.js shape) into the
@@ -995,7 +996,7 @@ export function VideoStudio() {
             }
             showVideoInCanvas(entry.url, entry.model);
         },
-        onDelete: (e) => deleteEntry(e),
+        onDelete: (e, opts) => deleteEntry(e, opts),
         onDownload: (e) => downloadFile(e.url, `video-${e.id || 'clip'}.mp4`),
         onReuse: (e) => {
             newPromptBtn.click();
@@ -1053,9 +1054,20 @@ export function VideoStudio() {
     newPromptBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
     newPromptBtn.textContent = t('video.new');
 
+    // Local results are files on disk: they can go straight onto the Movie timeline (desktop app only).
+    const movieBtn = document.createElement('button');
+    movieBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
+    movieBtn.textContent = t('common.sendToMovie');
+    movieBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultVideo.src);
+        if (entry?.path) sendToMovie({ path: entry.path, kind: 'video' });
+        else alert('Only videos made with a local model can be added to the movie.');
+    };
+
     canvasControls.appendChild(regenerateBtn);
     canvasControls.appendChild(extendBtn);
     canvasControls.appendChild(downloadBtn);
+    if (isMovieAvailable()) canvasControls.appendChild(movieBtn);
     canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
 
@@ -1091,8 +1103,8 @@ export function VideoStudio() {
     };
 
     // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
-    const deleteEntry = async (entry) => {
-        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+    const deleteEntry = async (entry, { silent = false } = {}) => {
+        if (entry.path && !silent && !confirm(t('common.deleteResultConfirm'))) return;
         try {
             await removeGenerationFile(entry);
         } catch (err) {

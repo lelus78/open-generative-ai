@@ -6,7 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { createProgressParser, summarizeRun, tailLines } = require('./wan2gpOutput');
 
-const MEDIA_EXTENSIONS = new Set(['.mp4', '.mkv', '.mov', '.webm', '.png', '.jpg', '.jpeg', '.webp']);
+const MEDIA_EXTENSIONS = new Set(['.mp4', '.mkv', '.mov', '.webm', '.png', '.jpg', '.jpeg', '.webp', '.wav', '.mp3', '.flac', '.ogg', '.m4a']);
 const OUTPUT_CAP = 2 * 1024 * 1024; // keep the last 2 MB of console output
 
 function defaultPythonPath(dir, platform = process.platform) {

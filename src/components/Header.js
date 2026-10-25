@@ -1,5 +1,6 @@
 import { SettingsModal } from './SettingsModal.js';
 import { createTranslateToggle } from '../lib/studioHelpers.js';
+import { openDebugPanel, isDebugAvailable } from './DebugPanel.js';
 import { t, getLang, setLang } from '../lib/i18n.js';
 
 export function Header(navigate) {
@@ -33,6 +34,8 @@ export function Header(navigate) {
         { label: t('nav.image'),   page: 'image' },
         { label: t('nav.video'),   page: 'video' },
         { label: t('nav.lipsync'), page: 'lipsync' },
+        ...(window.localAI?.h3 ? [{ label: t('nav.anime'), page: 'anime' }] : []),
+        ...(window.localAI?.movie ? [{ label: t('nav.movie'), page: 'movie' }] : []),
         { label: t('nav.cinema'),  page: 'cinema' },
         { label: t('nav.workflows'), page: 'workflows' },
         { label: t('nav.agents'),  page: 'agents' },
@@ -43,6 +46,7 @@ export function Header(navigate) {
         const link = document.createElement('a');
         link.textContent = label;
         link.className = `hover:text-white transition-all cursor-pointer relative group ${idx === 0 ? 'text-white' : ''}`;
+        link.dataset.page = page;
 
         if (idx === 0) {
             const dot = document.createElement('div');
@@ -57,6 +61,16 @@ export function Header(navigate) {
         };
 
         menu.appendChild(link);
+    });
+
+    // Other studios can jump to a tab (e.g. Image → Anime): move the highlight with them.
+    window.addEventListener('navigate', (e) => {
+        const target = Array.from(menu.children).find(child => child.dataset.page === e.detail?.page);
+        if (!target) return;
+        Array.from(menu.children).forEach(child => child.classList.remove('text-white'));
+        target.classList.add('text-white');
+        const dot = menu.querySelector('.bg-primary.rounded-full');
+        if (dot) target.appendChild(dot);
     });
 
     leftPart.appendChild(logoContainer);
@@ -87,9 +101,17 @@ export function Header(navigate) {
     langBtn.textContent = currentLang === 'zh-CN' ? 'EN' : '中文';
     langBtn.onclick = () => setLang(currentLang === 'zh-CN' ? 'en' : 'zh-CN');
 
+    // Debug log (desktop app): what was sent to the local tools and why something failed. Also Ctrl+Shift+D.
+    const debugBtn = document.createElement('button');
+    debugBtn.className = 'flex items-center px-2.5 py-1.5 rounded-md border border-white/10 bg-white/5 text-[13px] text-white/60 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all';
+    debugBtn.title = 'Debug log (Ctrl+Shift+D)';
+    debugBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M19 7l-3 2M5 7l3 2M19 19l-3-2M5 19l3-2M20 13h-4M4 13h4M10 2l1 2M14 2l-1 2"/></svg>';
+    debugBtn.onclick = openDebugPanel;
+
     const translateBtn = createTranslateToggle({ compact: true });
     if (translateBtn) rightPart.appendChild(translateBtn);
     rightPart.appendChild(langBtn);
+    if (isDebugAvailable()) rightPart.appendChild(debugBtn);
     rightPart.appendChild(settingsBtn);
 
     navBar.appendChild(leftPart);

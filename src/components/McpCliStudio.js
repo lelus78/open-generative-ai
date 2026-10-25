@@ -73,6 +73,21 @@ export function McpCliStudio() {
     `;
     inner.appendChild(hero);
 
+    inner.appendChild(localMcpSection());
+
+    // Hosted muapi services are paid: collapsed and dimmed below the local server
+    const paid = document.createElement('details');
+    paid.className = 'rounded-2xl border border-white/5 opacity-70 hover:opacity-100 transition-opacity';
+    paid.innerHTML = `
+        <summary class="cursor-pointer select-none px-6 py-4 text-[11px] font-bold uppercase tracking-widest text-secondary">
+            Paid cloud services (muapi) — optional
+        </summary>
+    `;
+    const paidBody = document.createElement('div');
+    paidBody.className = 'flex flex-col gap-12 px-6 pb-8 pt-2';
+    paid.appendChild(paidBody);
+    inner.appendChild(paid);
+
     // Quick start
     const quick = document.createElement('section');
     quick.className = 'glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-4';
@@ -87,7 +102,7 @@ export function McpCliStudio() {
             ${quickStep('3', 'Generate from chat', 'npx skills add SamurAIGPT/muapi-skills')}
         </div>
     `;
-    inner.appendChild(quick);
+    paidBody.appendChild(quick);
 
     // Feature cards
     const cards = document.createElement('section');
@@ -123,7 +138,7 @@ export function McpCliStudio() {
         icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.39 4.84L20 8l-4 3.9.94 5.5L12 14.77 7.06 17.4 8 11.9 4 8l5.61-1.16L12 2z"/></svg>`,
     }));
 
-    inner.appendChild(cards);
+    paidBody.appendChild(cards);
 
     // Usage examples
     const examples = document.createElement('section');
@@ -140,7 +155,7 @@ export function McpCliStudio() {
             ${exampleBlock('Run a skill', 'bash library/visual/nano-banana/scripts/\\\n  generate-nano-art.sh --file image.jpg --view')}
         </div>
     `;
-    inner.appendChild(examples);
+    paidBody.appendChild(examples);
 
     // Connect any AI client: one MCP endpoint, a ready-made config for each client
     const connect = document.createElement('section');
@@ -187,7 +202,7 @@ export function McpCliStudio() {
             </ol>
         </div>
     `;
-    inner.appendChild(connect);
+    paidBody.appendChild(connect);
 
     const clientSel = connect.querySelector('#clientSelector');
     const keyInput = connect.querySelector('#mcpKeyInput');
@@ -243,7 +258,7 @@ export function McpCliStudio() {
             <pre id="interactiveTerminal" class="text-[12px] font-mono text-primary bg-black/60 border border-white/5 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre"></pre>
         </div>
     `;
-    inner.appendChild(playground);
+    paidBody.appendChild(playground);
 
     // Event listener block to power the dynamic playground execution
     const modelSel = playground.querySelector('#modelSelector');
@@ -265,6 +280,126 @@ export function McpCliStudio() {
     inner.appendChild(footer);
 
     return container;
+}
+
+const LOCAL_NAME = 'open-generative-ai';
+const LOCAL_TOOLS = [
+    ['generate_image', 'Generate an image from a prompt (model, aspect ratio, seed, steps, negative prompt).'],
+    ['edit_image', 'Change an existing image with a prompt.'],
+    ['enhance_prompt', 'Rewrite a short prompt into a detailed one.'],
+    ['list_models', 'List local models (image, edit, video, lipsync) and whether each is downloaded and runnable.'],
+    ['recent_results', 'Show the latest generations.'],
+    ['cancel_generation', 'Stop the generation in progress.'],
+];
+const LOCAL_CLIENTS = [
+    { id: 'claude-code', label: 'Claude Code', where: 'Run in a terminal',
+        build: (url, key) => `claude mcp add --transport http ${LOCAL_NAME} ${url} \\\n  --header "Authorization: Bearer ${key}"` },
+    { id: 'cursor', label: 'Cursor', where: '~/.cursor/mcp.json',
+        build: (url, key) => jsonBlock({ mcpServers: { [LOCAL_NAME]: { url, headers: { Authorization: `Bearer ${key}` } } } }) },
+    { id: 'gemini', label: 'Gemini CLI', where: '~/.gemini/settings.json',
+        build: (url, key) => jsonBlock({ mcpServers: { [LOCAL_NAME]: { httpUrl: url, headers: { Authorization: `Bearer ${key}` } } } }) },
+    { id: 'claude-desktop', label: 'Claude Desktop / Windsurf / Cline (stdio only)', where: 'Their MCP JSON config file',
+        build: (url, key) => jsonBlock({ mcpServers: { [LOCAL_NAME]: bridged(url, key) } }) },
+    { id: 'generic', label: 'Any MCP client', where: 'Command-based (stdio) server',
+        build: (url, key) => `npx -y mcp-remote ${url} --header "Authorization:Bearer ${key}"` },
+];
+
+// The server that runs inside this app, on this PC only. URL and token come live from the app.
+function localMcpSection() {
+    const section = document.createElement('section');
+    section.className = 'glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-6';
+    section.innerHTML = `
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-widest text-secondary">Local MCP server (this PC)</span>
+            <div class="flex-1 h-px bg-white/5"></div>
+            <span id="localMcpStatus" class="text-[11px] font-bold text-secondary"></span>
+        </div>
+        <p class="text-[13px] text-secondary leading-relaxed">
+            This app runs its own MCP server over HTTP (Streamable HTTP, not stdio). It listens on <b class="text-white/80">127.0.0.1</b> only, so only programs on this PC can reach it,
+            and every request needs the token below. Turn it on in Settings → Local Models.
+        </p>
+        <div class="grid md:grid-cols-2 gap-4">
+            <div class="flex flex-col gap-1.5">
+                <span class="text-[11px] font-bold tracking-wider uppercase text-secondary">URL</span>
+                <pre id="localMcpUrl" class="text-[12px] font-mono text-primary bg-black/60 border border-white/5 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre"></pre>
+            </div>
+            <div class="flex flex-col gap-1.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-[11px] font-bold tracking-wider uppercase text-secondary">Token (header Authorization: Bearer)</span>
+                    <span class="flex gap-1">
+                        <button id="localMcpReveal" type="button" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-white/5 text-secondary hover:bg-white/10 hover:text-white transition-colors">Show</button>
+                        <button id="localMcpCopyToken" type="button" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-white/5 text-secondary hover:bg-white/10 hover:text-white transition-colors">Copy</button>
+                    </span>
+                </div>
+                <pre id="localMcpToken" class="text-[12px] font-mono text-primary bg-black/60 border border-white/5 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre"></pre>
+            </div>
+        </div>
+        <div class="flex flex-col gap-2">
+            <span class="text-[11px] font-bold tracking-wider uppercase text-secondary">Tools</span>
+            <ul class="grid md:grid-cols-2 gap-x-6 gap-y-1.5 text-[12px] text-secondary leading-relaxed">
+                ${LOCAL_TOOLS.map(([name, desc]) => `<li><code class="text-primary">${name}</code> — ${desc}</li>`).join('')}
+            </ul>
+        </div>
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1.5 w-full md:w-1/2">
+                <label class="text-[11px] font-bold tracking-wider uppercase text-secondary">Connect a client</label>
+                <select id="localMcpClient" class="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-white/30">
+                    ${LOCAL_CLIENTS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}
+                </select>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+                <span id="localMcpWhere" class="text-[12px] font-bold text-white/80"></span>
+                <button id="localMcpCopy" type="button" class="px-3 py-1 rounded-md text-[11px] font-bold bg-white/5 text-secondary hover:bg-white/10 hover:text-white transition-colors">Copy</button>
+            </div>
+            <pre id="localMcpSnippet" class="text-[12px] font-mono text-primary bg-black/60 border border-white/5 rounded-lg px-4 py-3 overflow-x-auto whitespace-pre"></pre>
+            <p class="text-[11px] text-secondary leading-relaxed">
+                The snippet contains the real token: treat it like a password. Another PC or phone cannot use the 127.0.0.1 address; that needs a tunnel, which exposes the server to the internet.
+            </p>
+        </div>
+    `;
+
+    const q = (id) => section.querySelector(id);
+    const state = { url: 'http://127.0.0.1:47821/mcp', token: 'YOUR_TOKEN', shown: false, live: false };
+    const mask = (s) => (s.length > 8 ? `${s.slice(0, 4)}${'•'.repeat(24)}${s.slice(-4)}` : s);
+    const flash = (btn, label) => { const old = btn.textContent; btn.textContent = label; setTimeout(() => { btn.textContent = old; }, 1500); };
+    const copy = async (btn, text) => {
+        try { await navigator.clipboard.writeText(text); flash(btn, 'Copied'); } catch { flash(btn, 'Copy manually'); }
+    };
+    const snippet = () => {
+        const client = LOCAL_CLIENTS.find(c => c.id === q('#localMcpClient').value) || LOCAL_CLIENTS[0];
+        return { client, text: client.build(state.url, state.token) };
+    };
+    const render = () => {
+        const { client, text } = snippet();
+        q('#localMcpUrl').textContent = state.url;
+        q('#localMcpToken').textContent = state.shown ? state.token : mask(state.token);
+        q('#localMcpReveal').textContent = state.shown ? 'Hide' : 'Show';
+        q('#localMcpWhere').textContent = client.where;
+        q('#localMcpSnippet').textContent = state.shown ? text : text.split(state.token).join(mask(state.token));
+    };
+
+    q('#localMcpClient').addEventListener('change', render);
+    q('#localMcpReveal').onclick = () => { state.shown = !state.shown; render(); };
+    q('#localMcpCopyToken').onclick = (e) => copy(e.currentTarget, state.token);
+    q('#localMcpCopy').onclick = (e) => copy(e.currentTarget, snippet().text);
+
+    const showStatus = (s) => {
+        const el = q('#localMcpStatus');
+        el.textContent = !state.live ? 'Not available in the browser build'
+            : s.running ? 'Running' : s.error ? `Error: ${s.error}` : 'Off';
+        el.className = `text-[11px] font-bold ${s?.running ? 'text-green-400' : 'text-secondary'}`;
+    };
+    showStatus({});
+    render();
+
+    if (window.localAI?.mcp) {
+        window.localAI.mcp.get().then((s) => {
+            Object.assign(state, { url: s.url, token: s.token, live: true });
+            showStatus(s);
+            render();
+        }).catch(() => {});
+    }
+    return section;
 }
 
 function quickStep(num, title, code) {

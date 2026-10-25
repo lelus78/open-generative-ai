@@ -1,12 +1,17 @@
-const { app, BrowserWindow, shell, dialog } = require('electron');
+const { app, BrowserWindow, shell, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { register: registerLocalInference } = require('./lib/localInference');
 const { register: registerWan2gp } = require('./lib/wan2gpProvider');
+const { register: registerComfyH3 } = require('./lib/comfyH3');
+const { register: registerMovie } = require('./lib/movieMaker');
+const { register: registerDebug } = require('./lib/debugIpc');
+const { shared: debugLog } = require('./lib/debugLog');
 const { setupContextMenu } = require('./lib/contextMenu');
 const { register: registerMcpControl } = require('./lib/mcpControl');
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
+    debugLog.error('app', 'uncaught exception in the main process', { error: err && err.stack ? err.stack : String(err) });
     try {
         dialog.showErrorBox('Open Generative AI — Unexpected Error', err && err.stack ? err.stack : String(err));
     } catch (_) {
@@ -24,6 +29,16 @@ if (process.platform === 'linux') {
 }
 
 let mainWindow;
+
+// Windows + Electron: after a native alert()/confirm() the page keeps the mouse but loses the keyboard
+// (text fields stop taking input) until the window is minimised and restored. Blur + focus does the same.
+ipcMain.on('app:refocus', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || win.isDestroyed()) return;
+    win.blur();
+    win.focus();
+    win.webContents.focus();
+});
 
 function createWindow() {
     const isMac = process.platform === 'darwin';
@@ -75,8 +90,11 @@ app.whenReady().then(() => {
     createWindow();
 
     try {
+        registerDebug();
         registerLocalInference();
         registerWan2gp();
+        registerComfyH3();
+        registerMovie();
         registerMcpControl();
     } catch (err) {
         console.error('Failed to register local-ai/wan2gp handlers:', err);

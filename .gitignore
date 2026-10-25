@@ -36,3 +36,6 @@ out/
 .env
 .env.*
 !.env.example
+
+# Movies made by the app for review
+output/

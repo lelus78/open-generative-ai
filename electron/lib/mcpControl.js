@@ -51,7 +51,7 @@ async function listModels() {
     });
     const fromWan = wanModels.map(m => ({
         id: m.id, name: m.name, engine: 'Wan2GP', fit: m.fit, legacy: !!m.legacy,
-        kind: m.lipsync ? 'lipsync' : m.type === 'video' ? 'video' : m.edit ? 'edit' : 'image',
+        kind: m.lipsync ? 'lipsync' : m.type === 'video' ? 'video' : m.type === 'audio' ? 'audio' : m.edit ? 'edit' : 'image',
         downloaded: !!m.downloaded,
         ready: !!m.ready && !!m.downloaded,
         reason: m.unavailableReason || (m.ready && !m.downloaded ? 'not downloaded yet — generate once from the app (or download it in Settings) first' : ''),

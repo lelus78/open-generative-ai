@@ -554,7 +554,7 @@ export function LipSyncStudio() {
             return [...lipsyncModels, ...localModels].find(m => m.id === id)?.name || id.replace(/[-_]/g, ' ');
         },
         onOpen: (e) => showVideoInCanvas(e.url),
-        onDelete: (e) => deleteEntry(e),
+        onDelete: (e, opts) => deleteEntry(e, opts),
         onDownload: (e) => downloadFile(e.url, `lipsync-${e.id || 'clip'}.mp4`),
         onReuse: (e) => {
             newBtn.click();
@@ -633,8 +633,8 @@ export function LipSyncStudio() {
     };
 
     // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
-    const deleteEntry = async (entry) => {
-        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+    const deleteEntry = async (entry, { silent = false } = {}) => {
+        if (entry.path && !silent && !confirm(t('common.deleteResultConfirm'))) return;
         try {
             await removeGenerationFile(entry);
         } catch (err) {

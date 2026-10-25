@@ -3,6 +3,25 @@
 @tailwind utilities;
 
 @layer base {
+    /* Drop-down lists: the app is dark, so the native list must be too (it opened white with white text). */
+    html {
+        color-scheme: dark;
+    }
+
+    select,
+    select option,
+    select optgroup {
+        color-scheme: dark;
+        background-color: #14141a;
+        color: #ffffff;
+    }
+
+    select option:checked,
+    select option:hover {
+        background-color: #2a2a35;
+        color: #ffffff;
+    }
+
     body {
         @apply bg-app-bg text-white font-sans antialiased h-screen overflow-hidden;
     }

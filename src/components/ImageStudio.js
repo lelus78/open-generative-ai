@@ -11,8 +11,12 @@ import { AuthModal } from './AuthModal.js';
 import { t } from '../lib/i18n.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../lib/fitBadge.js';
+import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
+import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
+import { SHEETS, applySheet, pickSheetAspect, nextSheet } from '../lib/contactSheet.js';
 import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { takeEntryToShow } from '../lib/externalResults.js';
+import { MAX_REPEATS, planVariants } from '../lib/promptVariants.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { downloadImage } from '../../packages/studio/src/utils/downloadImage.js';
@@ -41,11 +45,12 @@ export function ImageStudio() {
     let dropdownOpen = null;
     let uploadedImageUrls = []; // array of uploaded image URLs (multi-image support)
     let imageMode = false; // false = t2i models, true = i2i models
+    let sheetKind = 'off'; // 'off' | 'character' | 'environment': make a contact sheet instead of a single picture
 
     // Local inference state — only image-capable models surface here.
     // sd.cpp uses type='sd1'|'sdxl'|'z-image'; Wan2GP image models use type='image'.
     // Wan2GP video models (type='video') are hidden from ImageStudio.
-    const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && !m.edit);
+    const LOCAL_IMAGE_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && m.type !== 'audio' && !m.edit);
     // With a picture uploaded (image-to-image) the local list switches to the edit models.
     const LOCAL_EDIT_MODELS = LOCAL_MODEL_CATALOG.filter(m => m.edit);
     let useLocalModel = false;
@@ -170,6 +175,7 @@ export function ImageStudio() {
                 picker.setMaxImages(getMaxImagesForI2IModel(selectedModel));
             }
             if (useLocalModel) refreshLocalModelLabel();
+            paintSheetBtn();
             textarea.placeholder = uploadedImageUrls.length > 1
                 ? `${uploadedImageUrls.length} ${t('image.multiImageNote') || 'images selected — describe the transformation (optional)'}`
                 : t('image.placeholderTransform');
@@ -187,6 +193,7 @@ export function ImageStudio() {
             if (t2iResolutions.length > 0) document.getElementById('quality-btn-label').textContent = t2iResolutions[0];
             picker.setMaxImages(1);
             if (useLocalModel) refreshLocalModelLabel();
+            paintSheetBtn();
             textarea.placeholder = t('image.placeholder');
         }
     });
@@ -284,6 +291,33 @@ export function ImageStudio() {
 
     controlsLeft.appendChild(modelBtn);
     controlsLeft.appendChild(arBtn);
+
+    // Contact sheet: the same character from several sides, or the same place from several angles, in one image.
+    const sheetBtn = document.createElement('button');
+    sheetBtn.id = 'sheet-btn';
+    const paintSheetBtn = () => {
+        const active = sheetKind !== 'off';
+        sheetBtn.className = `flex items-center gap-1.5 px-3 py-2 rounded-xl transition-all border text-xs font-bold whitespace-nowrap ${active ? 'bg-primary/20 border-primary/40 text-primary' : 'bg-white/5 border-white/5 text-white/60 hover:bg-white/10'}`;
+        sheetBtn.textContent = `\u25A6 ${SHEETS[sheetKind].label}`;
+        sheetBtn.title = SHEETS[sheetKind].tooltip;
+        sheetBtn.style.display = imageMode ? 'none' : ''; // edits keep the picture's own framing
+    };
+    const setAspectForSheet = () => {
+        if (sheetKind === 'off' || imageMode) return;
+        const available = useLocalModel ? (getLocalModelById(activeLocalId())?.aspectRatios || []) : getCurrentAspectRatios(selectedModel);
+        const pick = pickSheetAspect(sheetKind, available);
+        if (!pick) return;
+        selectedAr = pick;
+        document.getElementById('ar-btn-label').textContent = pick;
+    };
+    sheetBtn.onclick = (e) => {
+        e.stopPropagation();
+        sheetKind = nextSheet(sheetKind);
+        setAspectForSheet();
+        paintSheetBtn();
+    };
+    paintSheetBtn();
+    controlsLeft.appendChild(sheetBtn);
     controlsLeft.appendChild(qualityBtn);
     
     // Advanced options toggle button
@@ -332,13 +366,21 @@ export function ImageStudio() {
         <div class="h-1.5 rounded-full bg-white/10 overflow-hidden">
             <div id="local-progress-fill" class="h-full bg-primary transition-all duration-200" style="width:0%"></div>
         </div>
-        <div class="flex justify-end">
-            <button id="local-cancel-btn" class="text-xs text-red-400 hover:text-red-300 transition-colors">${t('common.cancel')}</button>
+        <div class="flex items-center justify-between gap-3">
+            <span id="local-queue-info" class="text-xs text-white/50 truncate"></span>
+            <button id="local-cancel-btn" class="text-xs text-red-400 hover:text-red-300 transition-colors shrink-0">${t('common.cancel')}</button>
         </div>
     `;
     container.appendChild(localProgressWrap);
 
+    // Local generation queue: jobs run one after the other; the engine makes one image at a time.
+    const localQueue = [];
+    let queueRunning = false;
+    let queueTotal = 0;
+    let queueDone = 0;
+
     localProgressWrap.querySelector('#local-cancel-btn')?.addEventListener('click', () => {
+        localQueue.length = 0;
         localAI.cancelGeneration();
         localProgressWrap.classList.remove('flex');
         localProgressWrap.classList.add('hidden');
@@ -498,11 +540,16 @@ export function ImageStudio() {
             <!-- Batch Count -->
             <div class="flex flex-col gap-2">
                 <div class="flex items-center justify-between">
-                    <label class="text-xs font-bold text-secondary uppercase tracking-wider">${t('image.batchCount')}</label>
+                    <label class="text-xs font-bold text-secondary uppercase tracking-wider">Repetitions (local queue)</label>
                     <span id="batch-value" class="text-xs font-bold text-primary">1</span>
                 </div>
-                <input type="range" id="batch-slider" min="1" max="4" step="1" value="1" 
+                <input type="range" id="batch-slider" min="1" max="${MAX_REPEATS}" step="1" value="1"
                     class="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary">
+                <p class="text-[11px] text-secondary leading-relaxed">
+                    Each repetition is queued and made one after the other. Vary the prompt:
+                    <code class="text-primary">{red|blue|green}</code> picks one of your words each time,
+                    <code class="text-primary">[castle, tower]</code> lets the local AI swap those words for others.
+                </p>
             </div>
             
             <!-- Width & Height -->
@@ -1051,7 +1098,7 @@ export function ImageStudio() {
             return [...t2iModels, ...i2iModels].find(m => m.id === id)?.name || id.replace(/[-_]/g, ' ');
         },
         onOpen: (e) => showImageInCanvas(e.url),
-        onDelete: (e) => deleteEntry(e),
+        onDelete: (e, opts) => deleteEntry(e, opts),
         onDownload: (e) => downloadImage(e.url, `muapi-${e.id || 'image'}.jpg`),
         onReuse: (e) => {
             newPromptBtn.click();
@@ -1082,7 +1129,7 @@ export function ImageStudio() {
 
     // Canvas Controls
     const canvasControls = document.createElement('div');
-    canvasControls.className = 'mt-6 flex gap-3 opacity-0 transition-opacity delay-500 duration-500 justify-center';
+    canvasControls.className = 'mt-6 flex flex-wrap gap-3 opacity-0 transition-opacity delay-500 duration-500 justify-center';
 
     const regenerateBtn = document.createElement('button');
     regenerateBtn.className = 'bg-white/10 hover:bg-white/20 px-6 py-2.5 rounded-2xl text-xs font-bold transition-all border border-white/5 backdrop-blur-lg text-white';
@@ -1109,6 +1156,30 @@ export function ImageStudio() {
     canvasControls.appendChild(copyBtn);
     canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
+
+
+    // Send this picture to the Anime (H3) studio as a reference image (desktop app only).
+    const animeBtn = (() => { const b = document.createElement('button'); b.className = copyBtn.className; return b; })();
+    animeBtn.textContent = t('common.sendToAnime');
+    animeBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultImg.src);
+        sendToAnime({
+            url: resultImg.src,
+            prompt: entry?.subject || entry?.translatedPrompt || entry?.prompt || entry?.settings?.prompt || '',
+            role: entry?.sheet === 'environment' ? 'place' : entry?.sheet === 'character' ? 'character' : undefined,
+            sheet: !!entry?.sheet,
+        });
+    };
+    if (isAnimeAvailable()) canvasControls.appendChild(animeBtn);
+
+    // Put this picture on the Movie timeline (desktop app only).
+    const movieBtn = (() => { const b = document.createElement('button'); b.className = copyBtn.className; return b; })();
+    movieBtn.textContent = t('common.sendToMovie');
+    movieBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultImg.src);
+        sendToMovie({ url: resultImg.src, kind: 'image', prompt: entry?.translatedPrompt || entry?.prompt || '' });
+    };
+    if (isMovieAvailable()) canvasControls.appendChild(movieBtn);
 
     canvas.appendChild(imageContainer);
     canvas.appendChild(canvasControls);
@@ -1144,8 +1215,8 @@ export function ImageStudio() {
     };
 
     // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
-    const deleteEntry = async (entry) => {
-        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+    const deleteEntry = async (entry, { silent = false } = {}) => {
+        if (entry.path && !silent && !confirm(t('common.deleteResultConfirm'))) return;
         try {
             await removeGenerationFile(entry);
         } catch (err) {
@@ -1158,7 +1229,7 @@ export function ImageStudio() {
         renderHistory();
         if (resultImg.src === entry.url) newPromptBtn.click();
     };
-    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, deleteBtn, newPromptBtn]);
+    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, isAnimeAvailable() ? animeBtn : null, deleteBtn, newPromptBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultImg.src);
         if (entry) deleteEntry(entry);
@@ -1284,6 +1355,107 @@ export function ImageStudio() {
     };
 
     // ==========================================
+    // 4b. LOCAL QUEUE RUNNER
+    // ==========================================
+    const setQueueLabel = () => {
+        if (generateBtn.disabled) return;
+        generateBtn.innerHTML = queueRunning
+            ? `${t('common.generate')} <span class="text-xs font-bold opacity-70">+ queue (${localQueue.length} waiting)</span>`
+            : t('common.generate');
+    };
+
+    /** Makes one queued image. Resolves to true on success; on failure the error is shown and false returned. */
+    async function runLocalJob(job) {
+        const progressWrap = document.getElementById('local-progress-wrap');
+        const progressFill = document.getElementById('local-progress-fill');
+        const progressPct = document.getElementById('local-progress-pct');
+        const progressTitle = document.getElementById('local-progress-title');
+        const queueInfo = document.getElementById('local-queue-info');
+        if (queueInfo) queueInfo.textContent = `Image ${queueDone} of ${queueTotal} · ${localQueue.length} waiting · ${job.prompt.slice(0, 70)}`;
+        if (progressFill) progressFill.style.width = '0%';
+
+        if (!localFitInfo.size) localFitInfo = await loadFitInfo();
+        const unsub = localAI.onProgress((event) => {
+            const pct = Math.round((event.progress ?? 0) * 100);
+            const label = localProgressLabel(event);
+            // Downloading weights has no real percentage: show a pulsing bar and the amount instead.
+            const downloading = event.status === 'downloading';
+            // With the estimated size of the download (from the model list) the bar can show real progress.
+            const expectedGB = downloading ? localFitInfo.get(job.modelId)?.downloadGB : null;
+            const knownFraction = expectedGB ? Math.min(0.99, (event.downloadedBytes || 0) / (expectedGB * 1024 ** 3)) : null;
+            if (progressTitle) progressTitle.textContent = expectedGB ? `${label} · ~${expectedGB} GB` : label;
+            if (progressFill) {
+                progressFill.style.width = downloading ? (knownFraction === null ? '100%' : `${Math.round(knownFraction * 100)}%`) : `${pct}%`;
+                progressFill.classList.toggle('animate-pulse', downloading && knownFraction === null);
+            }
+            if (progressPct) progressPct.textContent = downloading || event.status === 'starting' ? '' : `${pct}%`;
+        });
+
+        try {
+            const res = await localAI.generate({
+                model: job.modelId,
+                prompt: job.sent,
+                negative_prompt: job.negative_prompt,
+                ...(job.image ? { image: job.image } : {}),
+                aspect_ratio: job.aspect_ratio,
+                steps: job.steps,
+                guidance_scale: job.guidance_scale,
+                seed: job.seed,
+            });
+            if (!res?.url) throw new Error('No output returned from local generation');
+            if (res.mediaType === 'video') {
+                throw new Error('This model produces video — use the Video studio instead.');
+            }
+            addToHistory({
+                id: `${Date.now()}-${queueDone}`,
+                url: res.url,
+                prompt: job.prompt,
+                sheet: job.sheet,
+                subject: job.subject,
+                model: `local:${job.modelId}`,
+                aspect_ratio: job.aspect_ratio,
+                seed: res.seed,
+                path: res.path, // file on disk (Wan2GP results), so Delete can remove it
+                translatedPrompt: res.translatedPrompt,
+                timestamp: new Date().toISOString()
+            });
+            showImageInCanvas(res.url);
+            return true;
+        } catch (e) {
+            console.error('[Local] generation error:', e);
+            hero.classList.remove('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
+            generateBtn.disabled = true;
+            generateBtn.innerHTML = `Error: ${e.message.slice(0, 120)}`;
+            setTimeout(() => { generateBtn.disabled = false; setQueueLabel(); }, 6000);
+            return false;
+        } finally {
+            unsub();
+        }
+    }
+
+    async function drainLocalQueue() {
+        if (queueRunning) return;
+        queueRunning = true;
+        const progressWrap = document.getElementById('local-progress-wrap');
+        hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
+        progressWrap.classList.remove('hidden');
+        progressWrap.classList.add('flex');
+        setQueueLabel();
+        while (localQueue.length) {
+            const job = localQueue.shift();
+            queueDone++;
+            setQueueLabel();
+            // One failure usually means every job would fail (model missing, out of memory): stop the queue.
+            if (!(await runLocalJob(job))) localQueue.length = 0;
+        }
+        queueRunning = false;
+        queueTotal = 0;
+        queueDone = 0;
+        progressWrap.classList.replace('flex', 'hidden');
+        setQueueLabel();
+    }
+
+    // ==========================================
     // 5. GENERATION LOGIC
     // ==========================================
     generateBtn.onclick = async () => {
@@ -1304,9 +1476,10 @@ export function ImageStudio() {
             alert('Describe the change you want, e.g. "make the dog black".');
             return;
         }
+        const sheet = imageMode ? 'off' : sheetKind;
         promptHistory.remember(prompt);
         // Edit instructions are sent as written: a style preset would add words to them.
-        const styledPrompt = imageMode && useLocalModel ? prompt : applyStyle(prompt);
+        const styledPrompt = imageMode && useLocalModel ? prompt : applyStyle(applySheet(sheet, prompt));
 
         // ── Local inference path ──────────────────────────────────────────────
         if (useLocalModel) {
@@ -1314,80 +1487,54 @@ export function ImageStudio() {
             const lm = getLocalModelById(localModelId);
             if (!lm) { alert('No local model selected.'); return; }
 
-            hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
-            generateBtn.disabled = true;
-            generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${t('common.generating')}`;
-
-            const progressWrap = document.getElementById('local-progress-wrap');
-            const progressFill = document.getElementById('local-progress-fill');
-            const progressPct = document.getElementById('local-progress-pct');
-            progressWrap.classList.remove('hidden');
-            progressWrap.classList.add('flex');
-
-            const progressTitle = document.getElementById('local-progress-title');
-            if (!localFitInfo.size) localFitInfo = await loadFitInfo();
-            const unsub = localAI.onProgress((event) => {
-                const pct = Math.round((event.progress ?? 0) * 100);
-                const label = localProgressLabel(event);
-                // Downloading weights has no real percentage: show a pulsing bar and the amount instead.
-                const downloading = event.status === 'downloading';
-                // With the estimated size of the download (from the model list) the bar can show real progress.
-                const expectedGB = downloading ? localFitInfo.get(localModelId)?.downloadGB : null;
-                const knownFraction = expectedGB ? Math.min(0.99, (event.downloadedBytes || 0) / (expectedGB * 1024 ** 3)) : null;
-                if (progressTitle) progressTitle.textContent = expectedGB ? `${label} · ~${expectedGB} GB` : label;
-                if (progressFill) {
-                    progressFill.style.width = downloading ? (knownFraction === null ? '100%' : `${Math.round(knownFraction * 100)}%`) : `${pct}%`;
-                    progressFill.classList.toggle('animate-pulse', downloading && knownFraction === null);
+            // One job per repetition; {a|b} and [ai words] in the prompt make each one different.
+            let prompts = [prompt];
+            if (!imageMode) {
+                const plan = planVariants(prompt, batchCount);
+                prompts = plan.prompts;
+                if (plan.ai) {
+                    generateBtn.disabled = true;
+                    generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> Writing variants…`;
+                    try {
+                        prompts = await window.localAI.promptVariants(prompt, batchCount);
+                    } catch (e) {
+                        generateBtn.innerHTML = `Error: ${e.message.slice(0, 120)}`;
+                        setTimeout(() => { generateBtn.disabled = false; setQueueLabel(); }, 6000);
+                        return;
+                    }
+                    generateBtn.disabled = false;
                 }
-                if (progressPct) progressPct.textContent = downloading || event.status === 'starting' ? '' : `${pct}%`;
-                generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${downloading ? t('video.localDownloadingShort') : label}`;
-            });
+            }
 
-            let hadError = false;
-            try {
-                const res = await localAI.generate({
-                    model: localModelId,
-                    prompt: styledPrompt,
+            // The sheet wording is English: translate the user's own words first so a non-English subject survives.
+            let subjects = prompts;
+            if (sheet !== 'off' && window.localAI?.translate) {
+                subjects = await Promise.all(prompts.map((p) => window.localAI.translate(p).then((r) => r.text || p).catch((err) => {
+                    window.localAI.debug?.log('sheet', 'warn', 'translating the subject failed: the sheet uses it as typed', { error: err.message, typed: p });
+                    return p;
+                })));
+                window.localAI.debug?.log('sheet', 'info', `${sheet} sheet: subject sent to the model`, { typed: prompts, subject: subjects, translated: subjects.some((s, i) => s !== prompts[i]) });
+            }
+            const aspect_ratio = imageMode ? await aspectOfImage(uploadedImageUrls[0], lm.aspectRatios) : selectedAr;
+            prompts.forEach((p, i) => {
+                localQueue.push({
+                    modelId: localModelId,
+                    prompt: p,
+                    sent: imageMode ? p : applyStyle(applySheet(sheet, subjects[i])),
+                    sheet: sheet !== 'off' ? sheet : undefined,
+                    subject: sheet !== 'off' ? subjects[i] : undefined,
                     negative_prompt: negativePrompt || undefined,
-                    ...(imageMode ? { image: uploadedImageUrls[0] } : {}),
-                    aspect_ratio: imageMode ? await aspectOfImage(uploadedImageUrls[0], lm.aspectRatios) : selectedAr,
+                    image: imageMode ? uploadedImageUrls[0] : undefined,
+                    aspect_ratio,
                     steps: stepsTouched ? steps : undefined,
                     guidance_scale: guidanceTouched ? guidanceScale : undefined,
-                    seed,
+                    // A fixed seed would repeat the same image for the same prompt: step it per job.
+                    seed: seed === -1 ? seed : seed + i,
                 });
-                unsub();
-                progressWrap.classList.replace('flex', 'hidden');
-                progressWrap.classList.add('hidden');
-
-                if (!res?.url) throw new Error('No output returned from local generation');
-                if (res.mediaType === 'video') {
-                    throw new Error('This model produces video — use the Video studio instead.');
-                }
-                addToHistory({
-                    id: Date.now().toString(),
-                    url: res.url,
-                    prompt,
-                    model: `local:${localModelId}`,
-                    aspect_ratio: selectedAr,
-                    seed: res.seed,
-                    path: res.path, // file on disk (Wan2GP results), so Delete can remove it
-                    translatedPrompt: res.translatedPrompt,
-                    timestamp: new Date().toISOString()
-                });
-                showImageInCanvas(res.url);
-            } catch (e) {
-                hadError = true;
-                unsub();
-                progressWrap.classList.add('hidden');
-                console.error('[Local] generation error:', e);
-                hero.classList.remove('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
-                console.error('[Local] full error:', e.message);
-                generateBtn.innerHTML = `Error: ${e.message.slice(0, 120)}`;
-                setTimeout(() => { generateBtn.innerHTML = t('common.generate'); }, 6000);
-            } finally {
-                generateBtn.disabled = false;
-                if (!hadError) generateBtn.innerHTML = t('common.generate');
-            }
+            });
+            queueTotal += prompts.length;
+            setQueueLabel();
+            drainLocalQueue();
             return;
         }
 
@@ -1404,7 +1551,7 @@ export function ImageStudio() {
 
         let hadError = false;
         let capturedRequestId = null;
-        const historyMeta = { prompt, model: selectedModel, aspect_ratio: selectedAr };
+        const historyMeta = { prompt, model: selectedModel, aspect_ratio: selectedAr, sheet: sheet !== 'off' ? sheet : undefined };
 
         try {
             let res;
@@ -1447,6 +1594,7 @@ export function ImageStudio() {
                     id: res.id || capturedRequestId || Date.now().toString(),
                     url: res.url,
                     prompt: prompt,
+                    sheet: sheet !== 'off' ? sheet : undefined,
                     model: selectedModel,
                     aspect_ratio: selectedAr,
                     timestamp: new Date().toISOString()

@@ -31,6 +31,7 @@ const RUNS_DIR = path.join(WORK_DIR, 'runs');
 fs.mkdirSync(CONFIG_DIR, { recursive: true });
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.mov', '.webm']);
+const AUDIO_EXTENSIONS = new Set(['.wav', '.mp3', '.flac', '.ogg', '.m4a']);
 // Smallest model in the catalog — used for the settings "Check" dry run.
 const CHECK_MODEL = getModelById('wan2gp:wan21-t2v-1.3b');
 
@@ -167,7 +168,7 @@ const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/
 
 function mediaResult(filePath, seed) {
     const ext = path.extname(filePath).toLowerCase();
-    const mediaType = VIDEO_EXTENSIONS.has(ext) ? 'video' : 'image';
+    const mediaType = VIDEO_EXTENSIONS.has(ext) ? 'video' : AUDIO_EXTENSIONS.has(ext) ? 'audio' : 'image';
     // Images come back inline (like sd.cpp results) so the UI can copy/download them: fetch() cannot
     // read file:// URLs. Videos are too big for that and play fine from their file URL.
     const url = mediaType === 'image' && IMAGE_MIME[ext]

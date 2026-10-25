@@ -66,9 +66,24 @@ export function createHistoryPanel(options) {
     let collapsed = false;
     try { collapsed = localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { /* storage unavailable */ }
     let query = '';
+    // Multi-select: pick several results, then download or delete them together.
+    let selecting = false;
+    let lastPicked = -1;
+    let visibleEntries = [];
+    const selected = new Set();
+    const keyOf = (entry) => String(entry.id ?? entry.url);
 
     const root = document.createElement('div');
     root.className = 'fixed right-0 top-0 h-full z-50 bg-black/70 backdrop-blur-xl border-l border-white/5 flex flex-col transition-all duration-300 translate-x-full opacity-0';
+    // Start below the top bar, so its right-hand buttons (Translate, language, Settings) stay reachable.
+    const placeBelowHeader = () => {
+        const top = document.querySelector('header')?.offsetHeight || 0;
+        root.style.top = `${top}px`;
+        root.style.height = `calc(100% - ${top}px)`;
+    };
+    placeBelowHeader();
+    requestAnimationFrame(placeBelowHeader); // the bar is not in the page yet when the panel is created
+    window.addEventListener('resize', placeBelowHeader);
 
     const header = document.createElement('div');
     header.className = 'flex items-center gap-2 px-3 pt-4 pb-2 shrink-0';
@@ -77,7 +92,11 @@ export function createHistoryPanel(options) {
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
     toggleBtn.className = 'p-1.5 rounded-lg text-muted hover:text-white hover:bg-white/10 transition-colors shrink-0';
+    const selectBtn = document.createElement('button');
+    selectBtn.type = 'button';
+    selectBtn.className = 'px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide text-secondary hover:text-white hover:bg-white/10 transition-colors shrink-0';
     header.appendChild(title);
+    header.appendChild(selectBtn);
     header.appendChild(toggleBtn);
 
     const search = document.createElement('input');
@@ -85,6 +104,22 @@ export function createHistoryPanel(options) {
     search.placeholder = t('history.search');
     search.className = 'mx-3 mb-2 px-3 py-2 rounded-xl bg-white/5 border border-white/5 focus:border-primary/50 outline-none text-[11px] text-white placeholder:text-muted shrink-0';
     search.oninput = () => { query = search.value.trim().toLowerCase(); render(); };
+
+    const bulkBar = document.createElement('div');
+    bulkBar.className = 'mx-3 mb-2 flex items-center gap-1.5 shrink-0';
+    const bulkButton = (cls, label) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `px-2.5 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-colors ${cls}`;
+        b.textContent = label;
+        return b;
+    };
+    const bulkCount = document.createElement('span');
+    bulkCount.className = 'flex-1 min-w-0 truncate text-[11px] font-bold text-white/80';
+    const bulkAll = bulkButton('bg-white/10 text-white hover:bg-white/20', 'All');
+    const bulkDownload = bulkButton('bg-primary text-black hover:opacity-90', t('common.download'));
+    const bulkDelete = bulkButton('bg-red-500 text-white hover:bg-red-600', t('common.delete'));
+    [bulkCount, bulkAll, bulkDownload, bulkDelete].forEach(el => bulkBar.appendChild(el));
 
     const list = document.createElement('div');
     list.className = 'flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 flex flex-col gap-1.5';
@@ -99,6 +134,7 @@ export function createHistoryPanel(options) {
 
     root.appendChild(header);
     root.appendChild(search);
+    root.appendChild(bulkBar);
     root.appendChild(list);
     root.appendChild(footer);
 
@@ -114,6 +150,53 @@ export function createHistoryPanel(options) {
         const hasFiles = all.some(e => e.path);
         if (!confirm(tf('history.clearAllConfirm', all.length, hasFiles))) return;
         onClearAll?.();
+    };
+
+    const setSelecting = (on) => {
+        selecting = on;
+        if (!on) { selected.clear(); lastPicked = -1; }
+        render();
+    };
+    selectBtn.onclick = () => setSelecting(!selecting);
+
+    /** Click on a result while selecting: toggle it; with Shift, the whole range since the last click. */
+    const pick = (entry, shiftKey) => {
+        const index = visibleEntries.indexOf(entry);
+        if (shiftKey && lastPicked >= 0 && index >= 0) {
+            const [from, to] = [Math.min(lastPicked, index), Math.max(lastPicked, index)];
+            visibleEntries.slice(from, to + 1).forEach(e => selected.add(keyOf(e)));
+        } else if (selected.has(keyOf(entry))) selected.delete(keyOf(entry));
+        else selected.add(keyOf(entry));
+        lastPicked = index;
+        render();
+    };
+    /** Ctrl/Cmd+click outside select mode starts a selection with that result. */
+    const startPick = (entry, event) => {
+        if (selecting || !(event.ctrlKey || event.metaKey)) return false;
+        selecting = true;
+        pick(entry, false);
+        return true;
+    };
+    const selectedEntries = () => entries().filter(e => selected.has(keyOf(e)));
+
+    bulkAll.onclick = () => {
+        if (visibleEntries.every(e => selected.has(keyOf(e)))) selected.clear();
+        else visibleEntries.forEach(e => selected.add(keyOf(e)));
+        render();
+    };
+    bulkDownload.onclick = async () => {
+        for (const entry of selectedEntries()) {
+            await onDownload(entry);
+            await new Promise(r => setTimeout(r, 350));   // downloads fired back to back get dropped
+        }
+    };
+    bulkDelete.onclick = async () => {
+        const picked = selectedEntries();
+        if (!picked.length) return;
+        const hasFiles = picked.some(e => e.path);
+        if (!confirm(`${t('common.delete')} ${picked.length}${hasFiles ? ' (+ files on disk)' : ''}?`)) return;
+        for (const entry of picked) await onDelete(entry, { silent: true });
+        setSelecting(false);
     };
 
     const mediaHtml = (entry) => mediaType === 'video'
@@ -135,14 +218,15 @@ export function createHistoryPanel(options) {
     const buildCard = (entry) => {
         const active = getActiveUrl() === entry.url;
         const card = document.createElement('div');
-        card.className = `group/card relative flex gap-3 p-2 rounded-2xl border cursor-pointer transition-all ${active ? 'border-primary/60 bg-primary/5 shadow-glow' : 'border-white/5 bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/15'}`;
+        const checked = selected.has(keyOf(entry));
+        card.className = `group/card relative flex gap-3 p-2 rounded-2xl border cursor-pointer transition-all ${checked ? 'border-primary bg-primary/10' : active ? 'border-primary/60 bg-primary/5 shadow-glow' : 'border-white/5 bg-white/[0.03] hover:bg-white/[0.07] hover:border-white/15'}`;
 
         const prompt = entry.prompt || entry.settings?.prompt || '';
         const when = timeAgo(toTime(entry));
         card.innerHTML = `
             <div class="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-white/5">${mediaHtml(entry)}</div>
             <div class="min-w-0 flex-1 flex flex-col justify-center gap-1.5">
-                <p title="${escapeHtml(entry.translatedPrompt ? `English: ${entry.translatedPrompt}` : '')}" class="text-[11px] leading-snug ${prompt ? 'text-white/90' : 'text-muted italic'}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(prompt || t('history.noPrompt'))}</p>
+                <p title="${escapeHtml(entry.translatedPrompt ? `${prompt}\n\nEnglish: ${entry.translatedPrompt}` : prompt)}" class="text-[11px] leading-snug ${prompt ? 'text-white/90' : 'text-muted italic'}" style="display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden">${escapeHtml(prompt || t('history.noPrompt'))}</p>
                 <div class="flex items-center gap-1.5 flex-wrap text-[9px] text-muted">
                     <span class="px-1.5 py-0.5 rounded-md bg-white/5 text-white/70 font-bold truncate max-w-[7.5rem]">${escapeHtml(getModelLabel(entry))}</span>
                     ${isLocal(entry) ? `<span class="px-1.5 py-0.5 rounded-md bg-primary/15 text-primary font-black uppercase">${t('history.local')}</span>` : ''}
@@ -151,6 +235,15 @@ export function createHistoryPanel(options) {
             </div>
         `;
 
+        if (selecting) {
+            const box = document.createElement('div');
+            box.className = `absolute top-3 left-3 w-5 h-5 rounded-md border-2 flex items-center justify-center text-[12px] font-black ${checked ? 'bg-primary border-primary text-black' : 'bg-black/60 border-white/60 text-transparent'}`;
+            box.textContent = '✓';
+            card.appendChild(box);
+            card.onclick = (e) => pick(entry, e.shiftKey);
+            return card;
+        }
+
         const actions = document.createElement('div');
         actions.className = 'absolute top-1.5 right-1.5 hidden group-hover/card:flex gap-1';
         if (onReuse && prompt) actions.appendChild(actionButton('bg-white/15 text-white', t('history.reuse'), ICONS.reuse, () => onReuse(entry)));
@@ -158,7 +251,7 @@ export function createHistoryPanel(options) {
         actions.appendChild(actionButton('bg-red-500 text-white', t('common.delete'), TRASH_ICON, () => onDelete(entry)));
         card.appendChild(actions);
 
-        card.onclick = () => { onOpen(entry); render(); };
+        card.onclick = (e) => { if (startPick(entry, e)) return; onOpen(entry); render(); };
         card.oncontextmenu = (e) => showPopupMenu(e, [
             { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
             ...(onReuse && prompt ? [{ label: t('history.reuse'), onClick: () => onReuse(entry) }] : []),
@@ -170,13 +263,33 @@ export function createHistoryPanel(options) {
         return card;
     };
 
+    let promptTip = null;
+    const hidePromptTip = () => { promptTip?.remove(); promptTip = null; };
+    const showPromptTip = (anchor, entry) => {
+        hidePromptTip();
+        const prompt = entry.prompt || entry.settings?.prompt || '';
+        const rect = anchor.getBoundingClientRect();
+        promptTip = document.createElement('div');
+        promptTip.className = 'fixed z-[60] max-w-xs rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl p-3 text-[11px] leading-snug text-white/90 shadow-2xl pointer-events-none';
+        promptTip.innerHTML = `
+            <p class="${prompt ? '' : 'text-muted italic'}">${escapeHtml(prompt || t('history.noPrompt'))}</p>
+            <p class="mt-1.5 text-[9px] text-muted">${escapeHtml(getModelLabel(entry))}${entry.seed != null ? ` · seed ${escapeHtml(String(entry.seed))}` : ''}</p>
+        `;
+        document.body.appendChild(promptTip);
+        const tip = promptTip.getBoundingClientRect();
+        promptTip.style.right = `${window.innerWidth - rect.left + 8}px`;
+        promptTip.style.top = `${Math.max(8, Math.min(rect.top, window.innerHeight - tip.height - 8))}px`;
+    };
+
     const buildStripThumb = (entry) => {
         const active = getActiveUrl() === entry.url;
         const thumb = document.createElement('div');
         thumb.className = `w-full aspect-square rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${active ? 'border-primary shadow-glow' : 'border-white/10 hover:border-white/30'}`;
-        thumb.title = entry.prompt || entry.settings?.prompt || '';
         thumb.innerHTML = mediaHtml(entry);
-        thumb.onclick = () => { onOpen(entry); render(); };
+        // The strip is too narrow for text: the prompt shows in a card beside the thumbnail on hover.
+        thumb.onmouseenter = () => showPromptTip(thumb, entry);
+        thumb.onmouseleave = hidePromptTip;
+        thumb.onclick = (e) => { if (startPick(entry, e)) return; onOpen(entry); render(); };
         thumb.oncontextmenu = (e) => showPopupMenu(e, [
             { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
             { label: t('common.download'), onClick: () => onDownload(entry) },
@@ -188,6 +301,9 @@ export function createHistoryPanel(options) {
 
     function render() {
         const all = entries();
+        for (const key of [...selected]) if (!all.some(e => keyOf(e) === key)) selected.delete(key);
+        if (selecting && !all.length) { selecting = false; selected.clear(); }
+        const strip = collapsed && !selecting;   // selecting needs the full cards
         const visible = all.length > 0;
         root.classList.toggle('translate-x-full', !visible);
         root.classList.toggle('opacity-0', !visible);
@@ -195,27 +311,37 @@ export function createHistoryPanel(options) {
         root.classList.toggle('translate-x-0', visible);
         root.classList.toggle('opacity-100', visible);
 
-        root.classList.toggle('w-72', visible && !collapsed);
-        root.classList.toggle('md:w-80', visible && !collapsed);
-        root.classList.toggle('w-14', visible && collapsed);
+        root.classList.toggle('w-72', visible && !strip);
+        root.classList.toggle('md:w-80', visible && !strip);
+        root.classList.toggle('w-14', visible && strip);
 
         if (host && window.innerWidth >= 768) {
-            host.style.paddingRight = visible ? (collapsed ? COLLAPSED_PADDING : EXPANDED_PADDING) : '';
+            host.style.paddingRight = visible ? (strip ? COLLAPSED_PADDING : EXPANDED_PADDING) : '';
         }
 
         toggleBtn.innerHTML = collapsed ? ICONS.chevronLeft : ICONS.chevronRight;
         toggleBtn.title = collapsed ? t('history.expand') : t('history.collapse');
+        toggleBtn.style.display = selecting ? 'none' : '';
+        selectBtn.style.display = strip ? 'none' : '';
+        selectBtn.textContent = selecting ? 'Done' : 'Select';
+        bulkBar.style.display = selecting ? 'flex' : 'none';
+        bulkCount.textContent = `${selected.size} selected`;
+        bulkDownload.disabled = bulkDelete.disabled = !selected.size;
+        bulkDownload.classList.toggle('opacity-40', !selected.size);
+        bulkDelete.classList.toggle('opacity-40', !selected.size);
         title.textContent = `${t('common.history')} · ${all.length}`;
-        title.style.display = collapsed ? 'none' : '';
-        header.className = `flex items-center gap-2 px-3 pt-4 pb-2 shrink-0 ${collapsed ? 'justify-center' : ''}`;
-        search.style.display = !collapsed && all.length > 4 ? '' : 'none';
-        footer.style.display = collapsed ? 'none' : '';
-        list.className = collapsed
+        title.style.display = strip ? 'none' : '';
+        header.className = `flex items-center gap-2 px-3 pt-4 pb-2 shrink-0 ${strip ? 'justify-center' : ''}`;
+        search.style.display = !strip && all.length > 4 ? '' : 'none';
+        footer.style.display = strip ? 'none' : '';
+        list.className = strip
             ? 'flex-1 overflow-y-auto custom-scrollbar px-2 pb-3 flex flex-col gap-2'
             : 'flex-1 overflow-y-auto custom-scrollbar px-3 pb-3 flex flex-col gap-1.5';
 
+        hidePromptTip();
         list.innerHTML = '';
-        if (collapsed) {
+        if (strip) {
+            visibleEntries = all;
             all.forEach(entry => list.appendChild(buildStripThumb(entry)));
             return;
         }
@@ -223,6 +349,7 @@ export function createHistoryPanel(options) {
         const filtered = query
             ? all.filter(e => `${e.prompt || ''} ${e.settings?.prompt || ''} ${getModelLabel(e)}`.toLowerCase().includes(query))
             : all;
+        visibleEntries = filtered;
         if (!filtered.length) {
             const empty = document.createElement('div');
             empty.className = 'text-[11px] text-muted text-center py-6';

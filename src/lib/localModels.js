@@ -331,6 +331,32 @@ export const LOCAL_MODEL_CATALOG = [
         aspectRatios: ['16:9', '9:16', '1:1'],
         tags: ['video', 'ltx', 'fast'],
     },
+    {
+        id: 'wan2gp:stable-audio3-music',
+        name: 'Stable Audio 3 Small — Music',
+        description: 'Audio — instrumental music, loops and grooves up to 120 s from a text description (genre, tempo, instruments, mood).',
+        type: 'audio',
+        audioKind: 'music',
+        family: 'stable-audio',
+        provider: 'wan2gp',
+        modelType: 'stable_audio3_small',
+        maxSeconds: 120,
+        aspectRatios: [],
+        tags: ['audio', 'music'],
+    },
+    {
+        id: 'wan2gp:stable-audio3-sfx',
+        name: 'Stable Audio 3 Small — Sound effects',
+        description: 'Audio — impacts, whooshes, ambience, foley and transitions up to 120 s from a text description.',
+        type: 'audio',
+        audioKind: 'sfx',
+        family: 'stable-audio',
+        provider: 'wan2gp',
+        modelType: 'stable_audio3_small_sfx',
+        maxSeconds: 120,
+        aspectRatios: [],
+        tags: ['audio', 'sfx'],
+    },
 ];
 
 export function getLocalModelById(id) {

@@ -494,6 +494,17 @@ export function LocalModelManager() {
             <input id="local-translate" type="checkbox" class="mt-0.5 accent-cyan-400">
             <span>${t('localModels.translatePrompts')}<span class="block text-[10px] text-muted">${t('localModels.translatePromptsHelp')}</span></span>
         </label>
+        <div class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between gap-3">
+                <span class="text-[11px] text-white/80">Writer model (Enhance, variants, translation)</span>
+                <span class="flex shrink-0 gap-2">
+                    <button id="local-writer-pick" class="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-white/5 transition-colors">Choose .gguf</button>
+                    <button id="local-writer-reset" class="rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-secondary hover:bg-white/5 transition-colors">Default</button>
+                </span>
+            </div>
+            <span id="local-writer-info" class="truncate text-[10px] text-muted"></span>
+            <span class="text-[10px] text-muted">The default Qwen3 refuses some prompts. Pick an uncensored (abliterated) GGUF in ChatML format, such as a Qwen3-4B or Qwen2.5 abliterated, Dolphin or Hermes. It is only used for writing prompts; image models are untouched.</span>
+        </div>
         <div class="flex items-center justify-between gap-3">
             <span id="local-outputs-info" class="text-[10px] text-muted"></span>
             <button id="local-outputs-clear" class="shrink-0 rounded-lg border border-red-500/30 px-2 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/10 transition-colors">${t('localModels.deleteGenerated')}</button>
@@ -508,6 +519,14 @@ export function LocalModelManager() {
     const translateEl = modelsSection.querySelector('#local-translate');
     localAI.getLocalSettings().then(s => { translateEl.checked = !!s.translatePrompts; });
     translateEl.onchange = () => { localAI.setLocalSettings({ translatePrompts: translateEl.checked }); };
+    const writerInfoEl = modelsSection.querySelector('#local-writer-info');
+    const paintWriter = (s) => {
+        writerInfoEl.textContent = !s?.writerModel ? 'Default: Qwen3-4B from Z-Image Turbo'
+            : s.writerModelMissing ? `File not found: ${s.writerModel} (using the default)` : s.writerModel;
+    };
+    localAI.getLocalSettings().then(paintWriter);
+    modelsSection.querySelector('#local-writer-pick').onclick = async () => paintWriter(await window.localAI.pickWriterModel());
+    modelsSection.querySelector('#local-writer-reset').onclick = async () => paintWriter(await localAI.setLocalSettings({ writerModel: '' }));
     const outputsInfoEl = modelsSection.querySelector('#local-outputs-info');
     const outputsClearBtn = modelsSection.querySelector('#local-outputs-clear');
     const fmtBytes = (b) => b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0, Math.round(b / 1024 ** 2))} MB`;

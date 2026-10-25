@@ -268,6 +268,33 @@ const WAN2GP_CATALOG = [
         aspectRatios: ['16:9', '9:16', '1:1'],
         tags: ['video', 'ltx', 'fast'],
     },
+    // ── Audio: soundtrack and sound effects for the Movie studio ─────────────────
+    {
+        id: 'wan2gp:stable-audio3-music',
+        name: 'Stable Audio 3 Small — Music',
+        description: 'Audio — instrumental music, loops and grooves up to 120 s from a text description (genre, tempo, instruments, mood).',
+        type: 'audio',
+        audioKind: 'music',
+        family: 'stable-audio',
+        provider: 'wan2gp',
+        modelType: 'stable_audio3_small',
+        maxSeconds: 120,
+        aspectRatios: [],
+        tags: ['audio', 'music'],
+    },
+    {
+        id: 'wan2gp:stable-audio3-sfx',
+        name: 'Stable Audio 3 Small — Sound effects',
+        description: 'Audio — impacts, whooshes, ambience, foley and transitions up to 120 s from a text description.',
+        type: 'audio',
+        audioKind: 'sfx',
+        family: 'stable-audio',
+        provider: 'wan2gp',
+        modelType: 'stable_audio3_small_sfx',
+        maxSeconds: 120,
+        aspectRatios: [],
+        tags: ['audio', 'sfx'],
+    },
 ];
 
 function getModelById(id) {
@@ -325,8 +352,14 @@ function buildWan2gpSettings(model, params = {}, { imageStart, audioStart } = {}
     };
     if (params.negative_prompt) settings.negative_prompt = params.negative_prompt;
 
-    const resolution = resolutionFor(model, params.aspect_ratio);
+    const resolution = model.type === 'audio' ? null : resolutionFor(model, params.aspect_ratio);
     if (resolution) settings.resolution = resolution;
+    if (model.type === 'audio') {
+        // Audio models take a length in seconds, not frames.
+        const seconds = Number(params.duration_seconds);
+        const max = model.maxSeconds || 120;
+        settings.duration_seconds = Math.max(2, Math.min(max, Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds) : 10));
+    }
 
     const steps = toInt(params.steps);
     if (steps && steps > 0) settings.num_inference_steps = steps;

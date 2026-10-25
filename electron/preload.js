@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld('localAI', {
     getHardware: () => ipcRenderer.invoke('local-ai:hardware'),
     translate: (text) => ipcRenderer.invoke('local-ai:translate', text),
     enhancePrompt: (text) => ipcRenderer.invoke('local-ai:enhance-prompt', text),
+    promptVariants: (text, count) => ipcRenderer.invoke('local-ai:prompt-variants', text, count),
+    suggestStories: (request) => ipcRenderer.invoke('local-ai:suggest-stories', request),
+    storyboard: (request) => ipcRenderer.invoke('local-ai:storyboard', request),
+    pickWriterModel: () => ipcRenderer.invoke('local-ai:pick-writer-model'),
+    refocus: () => ipcRenderer.send('app:refocus'),
     getSettings: () => ipcRenderer.invoke('local-ai:get-settings'),
     setSettings: (patch) => ipcRenderer.invoke('local-ai:set-settings', patch),
     pickStorageFolder: () => ipcRenderer.invoke('local-ai:pick-storage'),
@@ -39,6 +44,67 @@ contextBridge.exposeInMainWorld('localAI', {
         generate:   (params) => ipcRenderer.invoke('wan2gp:generate', params),
         cancelGeneration: () => ipcRenderer.invoke('wan2gp:cancel-generation'),
         uploadFile: (payload) => ipcRenderer.invoke('wan2gp:upload-file', payload),
+    },
+
+    // ── Debug log: what was asked, what each local tool did, why something failed ──
+    debug: {
+        get: () => ipcRenderer.invoke('debug:get'),
+        text: () => ipcRenderer.invoke('debug:text'),
+        clear: () => ipcRenderer.invoke('debug:clear'),
+        setVerbose: (value) => ipcRenderer.invoke('debug:set-verbose', value),
+        openFolder: () => ipcRenderer.invoke('debug:open-folder'),
+        log: (scope, level, message, data) => ipcRenderer.send('debug:log', scope, level, message, data),
+        onEntry: (callback) => {
+            const listener = (_, entry) => callback(entry);
+            ipcRenderer.on('debug:entry', listener);
+            return () => ipcRenderer.removeListener('debug:entry', listener);
+        },
+    },
+
+    // ── MiniMax H3 anime/reference-to-video via the user's ComfyUI ───────────
+    h3: {
+        getConfig:  () => ipcRenderer.invoke('h3:get-config'),
+        setConfig:  (cfg) => ipcRenderer.invoke('h3:set-config', cfg),
+        pickFolder: () => ipcRenderer.invoke('h3:pick-folder'),
+        status:     () => ipcRenderer.invoke('h3:status'),
+        composePrompt: (spec) => ipcRenderer.invoke('h3:compose-prompt', spec),
+        generate:   (params) => ipcRenderer.invoke('h3:generate', params),
+        cancel:     () => ipcRenderer.invoke('h3:cancel'),
+        freeGpu:    () => ipcRenderer.invoke('h3:free-gpu'),
+        deleteOutput: (filePath) => ipcRenderer.invoke('h3:delete-output', filePath),
+        readOutput: (filePath) => ipcRenderer.invoke('h3:read-output', filePath),
+        // { type: 'status' | 'progress' | 'preview', phase, ... }
+        onEvent: (callback) => {
+            const listener = (_, data) => callback(data);
+            ipcRenderer.on('h3:event', listener);
+            return () => ipcRenderer.removeListener('h3:event', listener);
+        },
+    },
+
+    // ── Movie maker: join clips and pictures into one finished movie (ffmpeg, local) ──
+    movie: {
+        status:  () => ipcRenderer.invoke('movie:status'),
+        options: () => ipcRenderer.invoke('movie:options'),
+        probe:   (files) => ipcRenderer.invoke('movie:probe', files),
+        render:  (project) => ipcRenderer.invoke('movie:render', project),
+        cancel:  () => ipcRenderer.invoke('movie:cancel'),
+        lastFrame: (file) => ipcRenderer.invoke('movie:last-frame', file),
+        exportTitle: (params) => ipcRenderer.invoke('movie:export-title', params),
+        upscale: (params) => ipcRenderer.invoke('movie:upscale', params),
+        cancelUpscale: () => ipcRenderer.invoke('movie:upscale-cancel'),
+        upscaleModels: () => ipcRenderer.invoke('movie:upscale-models'),
+        library: () => ipcRenderer.invoke('movie:library'),
+        importBytes: (payload) => ipcRenderer.invoke('movie:import-bytes', payload),
+        url:     (file) => ipcRenderer.invoke('movie:url', file),
+        pick:    (kind) => ipcRenderer.invoke('movie:pick', kind),
+        saveAs:  (file) => ipcRenderer.invoke('movie:save-as', file),
+        reveal:  (file) => ipcRenderer.invoke('movie:reveal', file),
+        // { type: 'status' | 'progress', progress: 0..1, message? }
+        onEvent: (callback) => {
+            const listener = (_, data) => callback(data);
+            ipcRenderer.on('movie:event', listener);
+            return () => ipcRenderer.removeListener('movie:event', listener);
+        },
     },
 
     // Progress events — both engines emit on local-ai:progress

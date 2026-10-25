@@ -7,6 +7,7 @@ import { t, tf } from '../lib/i18n.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
+import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
 import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
@@ -129,7 +130,7 @@ export function CinemaStudio() {
     let localInfo = new Map(); // id → model info (state / fit / readiness) from the desktop app
     let selectedLocalModel = null;
     try { selectedLocalModel = localStorage.getItem('cinema_local_model'); } catch { /* storage unavailable */ }
-    const localImageModels = isLocalAIAvailable() ? LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && !m.edit) : [];
+    const localImageModels = isLocalAIAvailable() ? LOCAL_MODEL_CATALOG.filter(m => m.type !== 'video' && m.type !== 'audio' && !m.edit) : [];
 
     // sd.cpp models must already be on disk (they download from Settings); Wan2GP ones may download on first use.
     const isLocalUsable = (m) => {
@@ -470,7 +471,7 @@ export function CinemaStudio() {
             return 'Nano Banana Pro';
         },
         onOpen: (e) => loadHistoryItem(e), // restores prompt and camera settings too
-        onDelete: (e) => deleteEntry(e),
+        onDelete: (e, opts) => deleteEntry(e, opts),
         onDownload: async (e) => {
             try {
                 const blobUrl = URL.createObjectURL(await (await fetch(e.url)).blob());
@@ -509,7 +510,7 @@ export function CinemaStudio() {
 
     // Canvas Controls
     const canvasControls = document.createElement('div');
-    canvasControls.className = 'mt-8 flex gap-3 opacity-0 transition-opacity delay-500 duration-500 justify-center';
+    canvasControls.className = 'mt-8 flex flex-wrap gap-3 opacity-0 transition-opacity delay-500 duration-500 justify-center';
 
     const createActionBtn = (label, primary = false) => {
         const btn = document.createElement('button');
@@ -532,14 +533,24 @@ export function CinemaStudio() {
     canvasControls.appendChild(copyBtn);
     canvasControls.appendChild(deleteBtn);
     canvasControls.appendChild(newPromptBtn);
+
+    // Send this picture to the Anime (H3) studio as a reference image (desktop app only).
+    const animeBtn = createActionBtn('');
+    animeBtn.textContent = t('common.sendToAnime');
+    animeBtn.onclick = () => {
+        const entry = generationHistory.find(e => e.url === resultImg.src);
+        sendToAnime({ url: resultImg.src, prompt: entry?.translatedPrompt || entry?.prompt || entry?.settings?.prompt || '' });
+    };
+    if (isAnimeAvailable()) canvasControls.appendChild(animeBtn);
+
     canvas.appendChild(canvasControls);
 
     container.appendChild(canvas);
 
     // --- History Logic ---
     // Remove a result: its file on disk (local Wan2GP), its history entry, and the full-screen view if open.
-    const deleteEntry = async (entry) => {
-        if (entry.path && !confirm(t('common.deleteResultConfirm'))) return;
+    const deleteEntry = async (entry, { silent = false } = {}) => {
+        if (entry.path && !silent && !confirm(t('common.deleteResultConfirm'))) return;
         try {
             await removeGenerationFile(entry);
         } catch (err) {
@@ -552,7 +563,7 @@ export function CinemaStudio() {
         renderHistory();
         if (resultImg.src === entry.url) resetToPrompt();
     };
-    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, deleteBtn, newPromptBtn]);
+    attachResultMenu(resultImg, [regenerateBtn, downloadBtn, copyBtn, isAnimeAvailable() ? animeBtn : null, deleteBtn, newPromptBtn]);
     deleteBtn.onclick = () => {
         const entry = generationHistory.find(e => e.url === resultImg.src);
         if (entry) deleteEntry(entry);
