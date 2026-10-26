@@ -16,7 +16,7 @@
 
 ## Download (Windows)
 
-Grab **Open Generative AI Setup &lt;version&gt;.exe** from the [Releases page](https://github.com/lelus78/open-generative-ai/releases) (about 90 MB, unsigned: SmartScreen → *More info → Run anyway*). Step by step, from source and troubleshooting: [docs/INSTALL.md](docs/INSTALL.md).
+Grab **Open-Generative-AI-Setup-&lt;version&gt;.exe** from the [Releases page](https://github.com/lelus78/open-generative-ai/releases) (about 90 MB, unsigned: SmartScreen → *More info → Run anyway*). Step by step, from source and troubleshooting: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Quick start (Windows)
 

@@ -4,7 +4,7 @@ Open Generative AI — Local Edition runs on your own PC. Pick the way that suit
 
 ## 1. The installer (Windows, easiest)
 
-1. Download `Open Generative AI Setup <version>.exe` from the [Releases page](https://github.com/lelus78/open-generative-ai/releases).
+1. Download `Open-Generative-AI-Setup-<version>.exe` from the [Releases page](https://github.com/lelus78/open-generative-ai/releases).
 2. Run it. Windows may show a *SmartScreen* warning because the installer is not signed: choose **More info → Run anyway**.
 3. Start **Open Generative AI** from the Start menu.
 4. Open **Settings → Local Models** and follow the three steps (each is one click):
