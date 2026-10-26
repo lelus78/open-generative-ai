@@ -57,3 +57,7 @@ Settings → Local Models → **Let AI assistants use this app (MCP)**. The app 
 - **Something failed:** the bug icon in the top bar opens the **Debug log** (what each tool did, with the prompt sent to the model). *Copy all* and paste it in an issue.
 - **A heavy model makes the PC slow while it loads:** that is the GPU at work; cancel from the studio, or pick a lighter model (the picker rates them).
 - **MCP does not start (port in use):** the default port is 47821; another program (for example a gaming-peripheral service) may already use it. Change `"port"` in `%APPDATA%\open-generative-ai\mcp-control.json` and restart the app.
+
+## Updates
+
+The installed app checks GitHub Releases a few seconds after it starts. When a newer version exists it asks whether to download it; the update is installed when you close the app. Models and results are not touched. (Running from source: `git pull`.)

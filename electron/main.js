@@ -9,6 +9,7 @@ const { register: registerDebug } = require('./lib/debugIpc');
 const { shared: debugLog } = require('./lib/debugLog');
 const { setupContextMenu } = require('./lib/contextMenu');
 const { register: registerMcpControl } = require('./lib/mcpControl');
+const { checkForUpdates } = require('./lib/updater');
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
@@ -105,6 +106,8 @@ app.whenReady().then(() => {
             `Open Generative AI started, but local model support failed to initialize:\n\n${err.message}`
         );
     }
+
+    setTimeout(checkForUpdates, 15000); // after start-up, so it never slows the first screen
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {

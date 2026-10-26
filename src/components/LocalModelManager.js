@@ -482,12 +482,14 @@ export function LocalModelManager() {
     const modelsSection = document.createElement('div');
     modelsSection.className = 'flex flex-col gap-3';
     modelsSection.innerHTML = `
-        <div class="flex items-center justify-between gap-3">
-            <h3 class="text-xs font-bold text-secondary uppercase tracking-wider shrink-0">${t('localModels.title')}</h3>
-            <div class="flex min-w-0 items-center gap-2">
-                <span id="local-model-storage" class="min-w-0 truncate text-right text-[10px] text-muted">${t('localModels.checkingStorage')}</span>
-                <button id="local-model-change-folder" class="shrink-0 rounded-lg border border-white/10 px-2 py-1 text-[10px] font-bold text-primary hover:bg-white/5 transition-colors">${t('localModels.changeFolder')}</button>
+        <h3 class="text-xs font-bold text-secondary uppercase tracking-wider">${t('localModels.title')}</h3>
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2.5">
+            <div class="min-w-0">
+                <div class="text-[11px] font-bold text-white/90">${t('localModels.folderTitle')}</div>
+                <div id="local-model-storage" class="truncate text-[11px] text-muted">${t('localModels.checkingStorage')}</div>
+                <div class="text-[10px] text-muted">${t('localModels.folderHint')}</div>
             </div>
+            <button id="local-model-change-folder" class="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-black hover:opacity-90 transition-opacity">${t('localModels.changeFolder')}</button>
         </div>
         <div id="local-model-hw" class="text-[10px] text-muted"></div>
         <label class="flex items-start gap-2 text-[11px] text-white/80 cursor-pointer">
