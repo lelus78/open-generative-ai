@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('localAI', {
         status:  () => ipcRenderer.invoke('movie:status'),
         options: () => ipcRenderer.invoke('movie:options'),
         fontBytes: () => ipcRenderer.invoke('movie:font-bytes'),
+        editPicture: (params) => ipcRenderer.invoke('movie:edit-picture', params),
         probe:   (files) => ipcRenderer.invoke('movie:probe', files),
         render:  (project) => ipcRenderer.invoke('movie:render', project),
         cancel:  () => ipcRenderer.invoke('movie:cancel'),

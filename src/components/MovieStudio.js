@@ -1345,6 +1345,28 @@ export function MovieStudio() {
         await addMany(resolved);
     }
     window.addEventListener('movie:items', takeSentItems);
+    // A project handed over by an AI assistant through MCP (src/lib/externalResults.js): take it as the current one.
+    window.addEventListener('movie:reload-project', () => {
+        const p = loadProject();
+        if (!p || !Array.isArray(p.scenes)) return;
+        Object.assign(state, {
+            scenes: p.scenes, format: p.format || state.format, fps: p.fps || state.fps, transition: p.transition || state.transition,
+            transitionSeconds: p.transitionSeconds ?? state.transitionSeconds, keepAudio: p.keepAudio !== false, fadeInOut: p.fadeInOut !== false,
+            music: p.music || null, musicVolume: p.musicVolume ?? state.musicVolume,
+        });
+        els.format.value = state.format;
+        els.transition.value = state.transition;
+        els.tsec.value = state.transitionSeconds;
+        els.tsecLabel.textContent = state.transitionSeconds;
+        els.fps.value = String(state.fps);
+        els.keep.checked = state.keepAudio;
+        els.fade.checked = state.fadeInOut;
+        els.mvol.value = state.musicVolume;
+        els.mvolLabel.textContent = Math.round(state.musicVolume * 100);
+        persist();
+        renderMusic();
+        renderScenes();
+    });
     window.addEventListener('beforeunload', () => { unsubscribe?.(); unsubscribeProgress?.(); });
 
     renderMusic();

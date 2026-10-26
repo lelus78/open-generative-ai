@@ -6,6 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { createHandler, start } = require('./mcpServer');
 const { createTools } = require('./mcpTools');
+const { createMediaTools, createJobs } = require('./mcpMedia');
+const { shared: debug, formatEntries } = require('./debugLog');
 const outputStore = require('./outputStore');
 
 const DEFAULT_PORT = 47821;
@@ -13,6 +15,7 @@ const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'mcp-control.json
 
 let server = null;
 let startError = null;
+const jobs = createJobs(); // kept across server restarts, so a long job is not lost when the setting is toggled
 
 function readSettings() {
     let saved = {};
@@ -68,16 +71,52 @@ function buildDeps() {
             ? wan2gp.generate(params, getMainWindow())
             : sd.generate(params, getMainWindow())),
         enhance: (text) => sd.enhancePrompt(text),
-        cancel: () => { try { sd.cancelGeneration(); } catch { /* idle */ } try { wan2gp.cancelGeneration(); } catch { /* idle */ } },
+        cancel: () => {
+            try { sd.cancelGeneration(); } catch { /* idle */ }
+            try { wan2gp.cancelGeneration(); } catch { /* idle */ }
+            try { require('./comfyH3').cancelGeneration(); } catch { /* idle */ }
+        },
         recent: (limit) => outputStore.recentResults(wan2gp.getRunsDir(), limit),
         notify: (event) => getMainWindow()?.webContents.send('local-ai:external', event),
+    };
+}
+
+
+/** What the media tools need: the engines of the video studios, MiniMax H3 and the movie maker, run without the interface. */
+function buildMediaDeps(deps) {
+    const comfy = require('./comfyH3');
+    const movie = require('./movieMaker').engine;
+    const sd = require('./localInference');
+    return {
+        jobs,
+        listModels: deps.listModels,
+        generate: deps.generate,
+        notify: deps.notify,
+        cancelEngines: deps.cancel,
+        h3: (params) => comfy.generate(params, getMainWindow()),
+        storyboard: (request) => sd.storyboard(request, (message) => deps.notify({ phase: 'status', message })),
+        movie: { ...movie, cancel: () => movie.cancel() },
+        movieStatus: async () => {
+            const ffmpeg = movie.findFfmpeg();
+            const h3 = comfy.inspectInstall();
+            return `ffmpeg ${ffmpeg.ok ? ffmpeg.version || 'found' : 'MISSING'}; MiniMax H3 ${h3.ok ? 'ready' : `not ready (${h3.error || 'not set up'})`}; H3 sharper pass ${h3.upscaler ? 'available' : 'not installed'}`;
+        },
+        openFolder: (kind) => require('./outputFolders').openFolder(kind),
+        debugLog: ({ lines, level, search }) => {
+            let entries = debug.entries();
+            if (level === 'warn') entries = entries.filter((e) => e.level !== 'info');
+            if (level === 'error') entries = entries.filter((e) => e.level === 'error');
+            if (search) { const needle = search.toLowerCase(); entries = entries.filter((e) => `${e.scope} ${e.message} ${JSON.stringify(e.data || '')}`.toLowerCase().includes(needle)); }
+            return formatEntries(entries.slice(-lines));
+        },
     };
 }
 
 async function startServer(settings) {
     await stopServer();
     startError = null;
-    const handle = createHandler({ name: 'open-generative-ai', version: app.getVersion(), tools: createTools(buildDeps()) });
+    const deps = buildDeps();
+    const handle = createHandler({ name: 'open-generative-ai', version: app.getVersion(), tools: [...createTools(deps), ...createMediaTools(buildMediaDeps(deps))] });
     try {
         server = await start({ port: settings.port, token: settings.token, handle });
     } catch (err) {

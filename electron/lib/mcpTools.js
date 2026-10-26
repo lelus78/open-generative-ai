@@ -102,8 +102,8 @@ function createTools(deps) {
     return [
         {
             name: 'list_models',
-            description: 'List the local AI models of the app with their kind (image, edit, video, lipsync), whether the PC can run them and whether they are already downloaded.',
-            inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['image', 'edit', 'video', 'lipsync'], description: 'Only models of this kind' } } },
+            description: 'List the local AI models of the app with their kind (image, edit, video, lipsync, audio), whether the PC can run them and whether they are already downloaded.',
+            inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['image', 'edit', 'video', 'lipsync', 'audio'], description: 'Only models of this kind' } } },
             run: async ({ kind }) => {
                 const models = await deps.listModels();
                 return { content: [text(describeModels(kind ? models.filter(m => m.kind === kind) : models))] };

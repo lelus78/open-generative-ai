@@ -36,13 +36,25 @@ function deliver(entry) {
     window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'image' } }));
 }
 
+// A movie project built by an assistant: the Movie tab keeps its project in localStorage, so it is written there and the tab is (re)opened.
+const MOVIE_PROJECT_KEY = 'movie-project-v1';
+function openMovieProject(project) {
+    try { localStorage.setItem(MOVIE_PROJECT_KEY, JSON.stringify(project)); } catch { /* storage unavailable */ }
+    window.dispatchEvent(new CustomEvent('navigate', { detail: { page: 'movie' } }));
+    window.dispatchEvent(new CustomEvent('movie:reload-project'));
+}
+
 export function initExternalResults() {
     const api = window.localAI;
     if (!api?.onExternal) return;
     api.onExternal((event) => {
-        if (event.phase === 'start') toast(`🤖 An assistant is working: ${event.modelName || 'local model'}…`, { sticky: true });
+        if (event.phase === 'start') toast(`🤖 An assistant is working: ${event.modelName || event.label || event.tool || 'local model'}…`, { sticky: true });
         else if (event.phase === 'error') toast(`🤖 The assistant's request failed: ${String(event.message || '').slice(0, 140)}`);
         else if (event.phase === 'result' && event.entry) { toast('🤖 An assistant added a result to Image Studio'); deliver(event.entry); }
+        else if (event.phase === 'media-result') {
+            const name = String(event.path || '').split(/[\x5c/]/).pop();
+            toast(`🤖 An assistant made ${event.kind === 'movie' ? 'a movie' : event.kind === 'audio' ? 'a sound' : 'a clip'}: ${name} (it is in the Movie library and in the Folders)`);
+        } else if (event.phase === 'movie-project' && event.project) { toast('🤖 An assistant opened a project in the Movie tab'); openMovieProject(event.project); }
     });
 }
 

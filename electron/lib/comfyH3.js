@@ -442,4 +442,4 @@ const bridge = {
     touch: touchServer,
 };
 
-module.exports = { register, stop: () => stopServer('the app is closing'), inspectInstall, getRunsDir: () => RUNS_DIR, bridge };
+module.exports = { register, stop: () => stopServer('the app is closing'), inspectInstall, getRunsDir: () => RUNS_DIR, bridge, generate, cancelGeneration };

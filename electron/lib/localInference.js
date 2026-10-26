@@ -797,4 +797,5 @@ module.exports = {
     listModels,
     cancelGeneration,
     enhancePrompt: (text) => getTranslator().enhance(text),
+    storyboard: (request, onStatus) => getTranslator().storyboard(request || {}, onStatus),
 };

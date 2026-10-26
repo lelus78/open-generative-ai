@@ -10,7 +10,7 @@
 ## At a glance
 
 - **Local first.** Image, Video, Lip Sync, Anime (H3), Movie, Music and Cinema all run on your GPU. Every local model is rated against your PC (*Recommended / Heavy / Won't fit*) before you download it.
-- **Driveable with MCP.** The app is an MCP server on `127.0.0.1` (off by default, token protected). Your assistant generates and edits images with the models you already have, and the results appear in the app. [Details](#the-app-as-an-mcp-server).
+- **Driveable with MCP.** The app is an MCP server on `127.0.0.1` (off by default, token protected). Your assistant can use all of it: images, video, lip sync, music, MiniMax H3 shots and the whole movie maker, with the models you already have, and the results appear in the app. [Details](#the-app-as-an-mcp-server).
 - **A movie studio.** An AI director turns an idea and your own pictures into a finished video, with titles, 32 transitions, local music and sound effects and a final upscale. [Details](#make-a-whole-movie-from-your-own-pictures).
 - **Your files stay yours.** History survives restarts, a **Folders** button opens the result folders, nothing is uploaded.
 
@@ -43,7 +43,7 @@ Then open **Settings → Local Models**: install the sd.cpp engine (one click), 
 | **Movie** | The AI director, per-shot references, picture editor, titles, transitions, music, final upscale. |
 | **Music** | Music and sound effects from a description, with Stable Audio 3. |
 | **Cinema** | Camera and lens settings turned into a visual look, with any ready image model. |
-| **MCP & CLI** | Copy-paste setups for Claude, Cursor, Windsurf, Gemini CLI, Cline and any MCP client. |
+| **MCP & CLI** | The local MCP server (URL, tools, token) and copy-paste setups for Claude, Cursor, Windsurf, Gemini CLI, Cline and any MCP client. |
 
 ## The app as an MCP server
 
@@ -54,7 +54,18 @@ claude mcp add --transport http open-generative-ai http://127.0.0.1:47821/mcp \
   --header "Authorization: Bearer <token shown in Settings>"
 ```
 
-Then ask your assistant things like *"generate a fox in the snow at sunset"* or *"make the dog in /path/dog.png black"*. It works with the app open, and what it makes shows up in Image Studio (and its history) while it works. Tools: `list_models`, `generate_image`, `edit_image`, `enhance_prompt`, `recent_results`, `cancel_generation`. Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. The MCP tools cover images today; the Movie, Music and video studios are used from the app itself. The *MCP & CLI* tab shows the local server (URL, tools, a masked token) and ready setups for each client.
+Then ask your assistant things like *"generate a fox in the snow at sunset"*, *"make the dog in /path/dog.png black"* or *"make a 15 second vertical reel from these three photos, with music, in Cinzel capitals"*. **The assistant can use the whole app**, not only the image studio, and what it makes shows up in the app while it works (a note says what it is doing, a project it builds can be opened in the Movie tab).
+
+| Area | Tools |
+|---|---|
+| **Images** | `generate_image`, `edit_image`, `enhance_prompt`, `edit_picture` (crop, rotate, flip, brightness, contrast, colour) |
+| **Video** | `generate_video` (text or picture to video), `make_lipsync` (portrait + audio), `h3_shot` (MiniMax H3 from reference pictures, also the Anime tab) |
+| **Music and sound** | `generate_music`, `generate_sound_effect` |
+| **Movie** | `movie_options` (transitions, styles, formats), `movie_storyboard` (the local writer), `movie_render` (scenes, captions, titles, transitions, music, fades), `movie_upscale`, `movie_title_clip` (transparent title), `movie_last_frame`, `movie_probe`, `movie_library`, `movie_open_in_app` |
+| **Long jobs** | videos, shots and movies run as jobs: the tool waits a little and answers with a job id; `job_status` waits for it, `list_jobs` and `cancel_job` manage them. One engine runs at a time. |
+| **The app itself** | `list_models` (what is ready, with the fit of your PC), `recent_results`, `show_folder`, `debug_log` (what each tool did and why a job failed), `cancel_generation` |
+
+Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. The *MCP & CLI* tab shows the local server (URL, tools, a masked token) and ready setups for each client.
 
 ## Connect any AI client (MCP & CLI)
 
@@ -130,7 +141,7 @@ Settings → Local Models: your hardware, the Wan2GP install (one click), where 
 | **Speed** | A new Wan2GP process per generation. | One **persistent Wan2GP server**: the first image loads the model, the next ones start at once (first edit about 8 minutes, the next one 37 seconds in my test). |
 | **History** | Lost on restart for local images. | Survives restarts: thumbnails, search, day groups, recover a prompt, delete one or all (and the file). |
 | **Movies and sound** | Not available. | Movie studio, Music tab, **Folders** button, **Debug** panel. |
-| **AI assistants** | Not available. | A **local MCP server inside the app**. |
+| **AI assistants** | Not available. | A **local MCP server inside the app** that covers images, video, music and the movie maker. |
 
 ## What else changed
 

@@ -274,6 +274,13 @@ async function exportTitle(params) {
         const plan = buildTitleExportArgs({ clip, width: params.width, height: params.height, fps: params.fps, seconds: params.seconds, format, fonts, fontFile: fonts.bold || fonts.sans }, out);
         const res = spawnSync(bin, plan.args, { encoding: 'utf8', windowsHide: true, timeout: 120000 });
         if (res.status !== 0 || !fs.existsSync(out)) throw new Error(`Could not make the title: ${(res.stderr || '').trim().split(String.fromCharCode(10)).slice(-3).join(' ')}`);
+        if (params.savePath) { // driven by MCP: no dialog, the caller names the file
+            const target = path.resolve(String(params.savePath));
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.copyFileSync(out, target);
+            debug.info('movie', 'transparent title saved', { path: target, format });
+            return target;
+        }
         const pick = await dialog.showSaveDialog(BrowserWindow.getAllWindows()[0] || null, {
             title: 'Save the transparent title',
             defaultPath: path.join(app.getPath('videos'), `title.${format}`),
@@ -357,6 +364,53 @@ function cancelUpscale() {
     return { ok: true };
 }
 
+
+// Crop, rotate, flip and colour of a picture, saved as a new PNG (the original is never touched). Same options as the picture editor.
+// crop: { x, y, width, height } as fractions of the picture (0..1), after the rotation and flip.
+function editPicture(params = {}) {
+    const bin = requireFfmpeg();
+    const file = checkMediaPath(params.input);
+    if (!/\.(png|jpe?g|webp|bmp)$/i.test(file)) throw new Error('input must be a png, jpg or webp picture.');
+    const turns = (((Math.round((Number(params.rotate) || 0) / 90) % 4) + 4) % 4);
+    const filters = [];
+    if (turns === 1) filters.push('transpose=1');
+    else if (turns === 2) filters.push('hflip,vflip');
+    else if (turns === 3) filters.push('transpose=2');
+    if (params.flip) filters.push('hflip');
+    const c = params.crop;
+    if (c) {
+        const clamp = (v) => Math.min(1, Math.max(0, Number(v)));
+        const x = clamp(c.x ?? 0);
+        const y = clamp(c.y ?? 0);
+        const w = Math.min(1 - x, Math.max(0.02, clamp(c.width ?? 1)));
+        const h = Math.min(1 - y, Math.max(0.02, clamp(c.height ?? 1)));
+        filters.push(`crop=trunc(iw*${w.toFixed(5)}/2)*2:trunc(ih*${h.toFixed(5)}/2)*2:trunc(iw*${x.toFixed(5)}/2)*2:trunc(ih*${y.toFixed(5)}/2)*2`);
+    }
+    const pct = (v) => Math.min(180, Math.max(40, Number(v) || 100)) / 100;
+    const brightness = pct(params.brightness);
+    const contrast = pct(params.contrast);
+    const saturation = pct(params.saturation);
+    if (brightness !== 1) filters.push(`lutrgb=r='clip(val*${brightness},0,255)':g='clip(val*${brightness},0,255)':b='clip(val*${brightness},0,255)'`);
+    if (contrast !== 1 || saturation !== 1) filters.push(`eq=contrast=${contrast}:saturation=${saturation}`);
+    if (!filters.length) filters.push('null');
+    fs.mkdirSync(IMPORTS_DIR, { recursive: true });
+    const out = path.join(IMPORTS_DIR, `edit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.png`);
+    const res = spawnSync(bin, ['-y', '-hide_banner', '-loglevel', 'error', '-i', file, '-vf', filters.join(','), '-frames:v', '1', '-update', '1', out], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+    if (res.status !== 0 || !fs.existsSync(out)) throw new Error(`Could not edit the picture: ${(res.stderr || '').trim().slice(-200)}`);
+    debug.info('movie', 'picture edited', { input: file, output: out, turns, flip: !!params.flip, crop: c || null });
+    return { path: out, url: pathToFileURL(out).href };
+}
+
+/** The choices of the movie maker as plain data (the interface and MCP both use them). */
+function movieOptions() {
+    const fonts = findFonts();
+    return {
+        transitions: TRANSITION_LIST,
+        titleStyles: availableStyles('title', TITLE_STYLES, fonts),
+        captionStyles: availableStyles('caption', CAPTION_STYLES, fonts),
+    };
+}
+
 // ─── Text style menu ────────────────────────────────────────────────
 /** Styles whose font exists on this computer (a style needs its own font; the plain ones always work), with the look the menu draws them in. */
 function availableStyles(kind, table, fonts) {
@@ -387,11 +441,8 @@ function register() {
         const f = findFfmpeg(true);
         return { ok: f.ok, ffmpeg: f.bin, version: f.version, error: f.ok ? '' : (f.bin ? 'ffmpeg is older than 4.3' : 'ffmpeg not found') };
     });
-    ipcMain.handle('movie:options', () => ({
-        transitions: TRANSITION_LIST,
-        titleStyles: availableStyles('title', TITLE_STYLES, findFonts()),
-        captionStyles: availableStyles('caption', CAPTION_STYLES, findFonts()),
-    }));
+    ipcMain.handle('movie:options', () => movieOptions());
+    ipcMain.handle('movie:edit-picture', (_, params) => editPicture(params || {}));
     ipcMain.handle('movie:font-bytes', () => fontBytes());
     ipcMain.handle('movie:probe', (_, files) => (files || []).map((f) => { try { return probeFile(checkMediaPath(f)); } catch (err) { return { path: f, error: err.message }; } }));
     ipcMain.handle('movie:render', (_, project) => render(project));
@@ -415,4 +466,8 @@ function register() {
     app.on('before-quit', () => { cancel(); cancelUpscale(); });
 }
 
-module.exports = { register, findFfmpeg };
+// `engine` is what the MCP server uses to run the movie maker without the interface.
+module.exports = {
+    register, findFfmpeg,
+    engine: { render, cancel, upscale, cancelUpscale, exportTitle, library, lastFrame, probeFile, checkMediaPath, importBytes, editPicture, movieOptions, findFfmpeg },
+};

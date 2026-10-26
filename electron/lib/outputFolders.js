@@ -32,17 +32,19 @@ async function saveCopy(file, suggestedName) {
     return pick.filePath;
 }
 
+async function openFolder(kind) {
+    const dir = folders()[kind];
+    if (!dir) throw new Error(`Unknown folder: ${kind}`);
+    fs.mkdirSync(dir, { recursive: true }); // nothing made yet: open the (empty) folder anyway
+    const problem = await shell.openPath(dir);
+    if (problem) throw new Error(`Could not open ${dir}: ${problem}`);
+    return dir;
+}
+
 function register() {
     ipcMain.handle('outputs:save-copy', (_, file, name) => saveCopy(file, name));
     ipcMain.handle('outputs:paths', () => folders());
-    ipcMain.handle('outputs:open', async (_, kind) => {
-        const dir = folders()[kind];
-        if (!dir) throw new Error(`Unknown folder: ${kind}`);
-        fs.mkdirSync(dir, { recursive: true }); // nothing made yet: open the (empty) folder anyway
-        const problem = await shell.openPath(dir);
-        if (problem) throw new Error(`Could not open ${dir}: ${problem}`);
-        return dir;
-    });
+    ipcMain.handle('outputs:open', (_, kind) => openFolder(kind));
 }
 
-module.exports = { register, folders };
+module.exports = { register, folders, openFolder };
