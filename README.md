@@ -194,7 +194,7 @@ Each model's licence is its own; none of the weights are in this repository.
 
 ## Cloud models (optional)
 
-The upstream project also works with cloud models through an API key (Settings → *API Key (optional)*). That path is not what this fork is about and is not needed for anything above; its documentation, the hosted version and the desktop installers are in [docs/original-project.md](docs/original-project.md).
+The upstream project also works with cloud models through an API key (Settings → *API Key (optional)*). That path uses [MuAPI](https://muapi.ai), a third-party service: this fork is **not affiliated with or endorsed by MuAPI**, nothing here depends on it, and it is off unless you enter a key. It is not what this fork is about and is not needed for anything above; its documentation, the hosted version and the desktop installers are in [docs/original-project.md](docs/original-project.md).
 
 ## Credits
 
