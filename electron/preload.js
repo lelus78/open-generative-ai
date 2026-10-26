@@ -92,6 +92,7 @@ contextBridge.exposeInMainWorld('localAI', {
     movie: {
         status:  () => ipcRenderer.invoke('movie:status'),
         options: () => ipcRenderer.invoke('movie:options'),
+        fontBytes: () => ipcRenderer.invoke('movie:font-bytes'),
         probe:   (files) => ipcRenderer.invoke('movie:probe', files),
         render:  (project) => ipcRenderer.invoke('movie:render', project),
         cancel:  () => ipcRenderer.invoke('movie:cancel'),
@@ -103,6 +104,7 @@ contextBridge.exposeInMainWorld('localAI', {
         library: () => ipcRenderer.invoke('movie:library'),
         importBytes: (payload) => ipcRenderer.invoke('movie:import-bytes', payload),
         url:     (file) => ipcRenderer.invoke('movie:url', file),
+        readImage: (file) => ipcRenderer.invoke('movie:read-image', file),
         pick:    (kind) => ipcRenderer.invoke('movie:pick', kind),
         saveAs:  (file) => ipcRenderer.invoke('movie:save-as', file),
         reveal:  (file) => ipcRenderer.invoke('movie:reveal', file),

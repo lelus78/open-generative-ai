@@ -8,6 +8,7 @@ const { spawn, spawnSync } = require('child_process');
 const { pathToFileURL } = require('url');
 const { resolveLocalAiPaths } = require('./localInferencePaths');
 const outputStore = require('./outputStore');
+const { styledText, groupOf } = require('./movieText');
 const { buildMovieArgs, buildTitleExportArgs, parseProgress, parseProbe, captionFileText, TRANSITION_LIST, TITLE_STYLES, CAPTION_STYLES } = require('./movieFilter');
 const { shared: debug } = require('./debugLog');
 const upscaler = require('./movieUpscale');
@@ -31,6 +32,21 @@ const FONT_CANDIDATES = {
     serif: ['C:/Windows/Fonts/georgia.ttf', 'C:/Windows/Fonts/times.ttf', '/System/Library/Fonts/Supplemental/Times New Roman.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf'],
     serifBold: ['C:/Windows/Fonts/georgiab.ttf', 'C:/Windows/Fonts/timesbd.ttf', '/System/Library/Fonts/Supplemental/Times New Roman Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf'],
     impact: ['C:/Windows/Fonts/impact.ttf', '/System/Library/Fonts/Supplemental/Impact.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'],
+    // Cinzel Decorative (SIL Open Font License, see electron/assets/fonts) ships with the app for the artistic text styles.
+    display: [path.join(__dirname, '..', 'assets', 'fonts', 'CinzelDecorative-Bold.ttf')],
+    corsiva: ['C:/Windows/Fonts/MTCORSVA.TTF'],
+    brush: ['C:/Windows/Fonts/BRUSHSCI.TTF'],
+    hand: ['C:/Windows/Fonts/Inkfree.ttf'],
+    blackletter: ['C:/Windows/Fonts/OLDENGL.TTF'],
+    stencil: ['C:/Windows/Fonts/STENCIL.TTF'],
+    copper: ['C:/Windows/Fonts/COPRGTB.TTF'],
+    light: ['C:/Windows/Fonts/segoeuil.ttf', '/System/Library/Fonts/Supplemental/Arial.ttf'],
+    italic: ['C:/Windows/Fonts/georgiai.ttf', '/System/Library/Fonts/Supplemental/Times New Roman Italic.ttf'],
+    papyrus: ['C:/Windows/Fonts/PAPYRUS.TTF', '/System/Library/Fonts/Papyrus.ttc'],
+    chiller: ['C:/Windows/Fonts/CHILLER.TTF'],
+    showcard: ['C:/Windows/Fonts/SHOWG.TTF'],
+    bauhaus: ['C:/Windows/Fonts/BAUHS93.TTF'],
+    condensed: ['C:/Windows/Fonts/bahnschrift.ttf'],
     mono: ['C:/Windows/Fonts/consola.ttf', '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'],
 };
 function findFonts() {
@@ -134,8 +150,8 @@ async function render(project) {
         for (const [index, input] of (project.clips || []).entries()) {
             const clip = { ...input };
             const textFile = (name, text) => { const f = path.join(runDir, `${name}-${index}.txt`); fs.writeFileSync(f, captionFileText(text)); return f; };
-            if (String(clip.caption || '').trim()) clip.captionFile = textFile('caption', clip.caption);
-            if (String(clip.title || '').trim()) clip.titleFile = textFile('title', clip.title);
+            if (String(clip.caption || '').trim()) clip.captionFile = textFile('caption', styledText(clip.captionStyle, 'caption', clip.caption));
+            if (String(clip.title || '').trim()) clip.titleFile = textFile('title', styledText(clip.titleStyle, 'title', clip.title));
             if (String(clip.subtitle || '').trim()) clip.subtitleFile = textFile('subtitle', clip.subtitle);
             if (clip.sfx?.path) clip.sfx = { ...clip.sfx, path: checkMediaPath(clip.sfx.path) };
             else delete clip.sfx;
@@ -227,6 +243,13 @@ function importBytes({ name, type, bytes }) {
     const file = path.join(IMPORTS_DIR, `${Date.now()}-${Math.random().toString(36).slice(2, 7)}${ext}`);
     fs.writeFileSync(file, Buffer.from(bytes));
     return { path: file, url: pathToFileURL(file).href };
+}
+
+// The bytes of a picture, so the image editor can draw it on a canvas without the browser treating it as another origin.
+function readImage(file) {
+    const full = path.resolve(String(file || ''));
+    if (!/\.(png|jpe?g|webp|bmp)$/i.test(full) || !fs.existsSync(full)) throw new Error('That picture could not be opened.');
+    return { bytes: fs.readFileSync(full), type: /\.png$/i.test(full) ? 'image/png' : /\.webp$/i.test(full) ? 'image/webp' : 'image/jpeg' };
 }
 
 function readableUrl(file) {
@@ -334,6 +357,23 @@ function cancelUpscale() {
     return { ok: true };
 }
 
+// ─── Text style menu ────────────────────────────────────────────────
+/** Styles whose font exists on this computer (a style needs its own font; the plain ones always work), with the look the menu draws them in. */
+function availableStyles(kind, table, fonts) {
+    return Object.entries(table).filter(([, style]) => !!fonts[style.font]).map(([id, style]) => [id, style.label, groupOf(kind, id), {
+        font: style.font, color: style.color, caps: !!style.caps, border: style.border || 0, borderColor: style.borderColor || '',
+        box: style.box || '', shadow: style.shadow || null, size: style.sizeMul || (kind === 'title' ? Math.min(1.5, Math.max(1, style.scale || 1)) : 1),
+    }]);
+}
+
+/** The font files of the styles, as bytes: the menu draws every entry in its own typeface. */
+function fontBytes() {
+    const fonts = findFonts();
+    const out = {};
+    for (const [role, file] of Object.entries(fonts)) { try { out[role] = fs.readFileSync(file); } catch { /* unreadable font: its styles fall back */ } }
+    return out;
+}
+
 function register() {
     ipcMain.handle('movie:export-title', (_, params) => exportTitle(params || {}));
     ipcMain.handle('movie:last-frame', (_, file) => lastFrame(file));
@@ -349,15 +389,17 @@ function register() {
     });
     ipcMain.handle('movie:options', () => ({
         transitions: TRANSITION_LIST,
-        titleStyles: Object.entries(TITLE_STYLES).map(([id, s]) => [id, s.label]),
-        captionStyles: Object.entries(CAPTION_STYLES).map(([id, s]) => [id, s.label]),
+        titleStyles: availableStyles('title', TITLE_STYLES, findFonts()),
+        captionStyles: availableStyles('caption', CAPTION_STYLES, findFonts()),
     }));
+    ipcMain.handle('movie:font-bytes', () => fontBytes());
     ipcMain.handle('movie:probe', (_, files) => (files || []).map((f) => { try { return probeFile(checkMediaPath(f)); } catch (err) { return { path: f, error: err.message }; } }));
     ipcMain.handle('movie:render', (_, project) => render(project));
     ipcMain.handle('movie:cancel', () => cancel());
     ipcMain.handle('movie:library', () => library());
     ipcMain.handle('movie:import-bytes', (_, payload) => importBytes(payload));
     ipcMain.handle('movie:url', (_, file) => readableUrl(file));
+    ipcMain.handle('movie:read-image', (_, file) => readImage(file));
     ipcMain.handle('movie:pick', async (_, kind) => {
         const res = await dialog.showOpenDialog(win(), { title: `Choose ${kind === 'audio' ? 'a music file' : kind === 'image' ? 'pictures' : 'videos'}`, properties: kind === 'audio' ? ['openFile'] : ['openFile', 'multiSelections'], filters: MEDIA_FILTERS[kind] || [] });
         return res.canceled ? [] : res.filePaths;

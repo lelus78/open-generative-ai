@@ -218,3 +218,29 @@ test('a title can be exported with a transparent background (ProRes 4444 and Web
         assert.match(info, /rgba|pal8|argb/i);
     }
 });
+
+test('artistic caption style: capitals fit the width and gold rules are drawn above and below', () => {
+    const { captionFilters, styledText } = require('../electron/lib/movieText');
+    assert.equal(styledText('cinzel', 'caption', 'Poi arriva il colore.'), 'POI ARRIVA IL COLORE.');
+    assert.equal(styledText('subtitle', 'caption', 'Poi arriva'), 'Poi arriva');
+    const filters = captionFilters({ clip: { caption: 'Ogni dettaglio, a mano.', captionFile: 'c.txt', captionStyle: 'cinzelrules' }, dur: 4, w: 1080, h: 1920, fonts: { display: 'C:/f/Cinzel.ttf' } });
+    assert.equal(filters.length, 3);
+    assert.ok(filters.every((f) => f.startsWith('drawtext=') && f.includes('alpha=')));
+    assert.equal(captionFilters({ clip: { caption: 'Ciao', captionFile: 'c.txt', captionStyle: 'cinzel' }, dur: 4, w: 1080, h: 1920, fonts: { display: 'C:/f/Cinzel.ttf' } }).length, 1);
+    const size = Number(/fontsize=(\d+)/.exec(filters[1])[1]);
+    assert.ok(size * 0.66 * 'Ogni dettaglio, a mano.'.length <= 1080 * 0.87, `size ${size} too wide`);
+});
+
+test('every title and caption style builds valid drawtext filters', () => {
+    const { TITLE_STYLES, CAPTION_STYLES, titleFilters, captionFilters } = require('../electron/lib/movieText');
+    const roles = new Set([...Object.values(TITLE_STYLES), ...Object.values(CAPTION_STYLES)].map((s) => s.font));
+    const fonts = Object.fromEntries([...roles].map((r) => [r, `C:/f/${r}.ttf`]));
+    for (const id of Object.keys(TITLE_STYLES)) {
+        const f = titleFilters({ clip: { kind: 'video', title: "Ambry's Lab", titleFile: 't.txt', titleStyle: id }, dur: 4, w: 720, h: 1280, fonts, fontFile: 'C:/f/bold.ttf' });
+        assert.ok(f.length >= 1 && f.every((x) => x.startsWith('drawtext=') && !/NaN|undefined/.test(x)), `title ${id}`);
+    }
+    for (const id of Object.keys(CAPTION_STYLES)) {
+        const f = captionFilters({ clip: { caption: 'Poi arriva il colore.', captionFile: 'c.txt', captionStyle: id }, dur: 4, w: 720, h: 1280, fonts, fontFile: 'C:/f/bold.ttf' });
+        assert.ok(f.length >= 1 && f.every((x) => x.startsWith('drawtext=') && !/NaN|undefined/.test(x)), `caption ${id}`);
+    }
+});

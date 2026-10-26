@@ -1,3 +1,4 @@
+import { openImageEditor } from './ImageEditor.js';
 import { t } from '../lib/i18n.js';
 import { takeQueuedMovieItems } from '../lib/movieHandoff.js';
 import { localAI } from '../lib/localInferenceClient.js';
@@ -22,10 +23,40 @@ const MOTIONS = [['zoom-in', 'Slow zoom in'], ['zoom-out', 'Slow zoom out'], ['p
 const IMAGE_RE = /\.(png|jpe?g|webp)$/i;
 
 const api = () => window.localAI?.movie;
+// Opens the picture editor on a file; resolves with the saved copy ({ path, url }) or null when cancelled. The original is never changed.
+async function editPicture(file) {
+    const edited = await openImageEditor(file);
+    return edited ? api().importBytes(edited) : null;
+}
+
+// ── Text style menu ─────────────────────────────────────────────
+// A plain drop-down where every entry is written in its own typeface and colour, so the style is seen before it is chosen.
+let fontsReady = null;
+const loadStyleFonts = () => {
+    fontsReady = fontsReady || api().fontBytes().then((all) => Promise.all(Object.entries(all || {}).map(async ([role, bytes]) => {
+        try { document.fonts.add(await new FontFace(`mvf-${role}`, bytes).load()); } catch { /* that font stays the default */ }
+    }))).catch(() => {});
+    return fontsReady;
+};
+const cssColor = (value, fallback) => {
+    const [name, alpha] = String(value || fallback).split('@');
+    const hex = name.startsWith('0x') ? `#${name.slice(2)}` : name;
+    const rgb = hex === 'black' ? [0, 0, 0] : /^#[0-9a-f]{6}$/i.test(hex) ? [1, 3, 5].map((k) => parseInt(hex.slice(k, k + 2), 16)) : null;
+    return rgb ? `rgba(${rgb.join(',')},${alpha ?? 1})` : hex;
+};
+function lookCss(look) {
+    const css = [`font-family:'mvf-${look.font}',sans-serif`, `color:${cssColor(look.color, '#ffffff')}`, `font-size:${Math.round(16 * (look.size || 1) * (look.caps ? 0.82 : 1))}px`, 'line-height:1.3', 'white-space:nowrap'];
+    if (look.caps) css.push('text-transform:uppercase');
+    if (look.border) css.push(`-webkit-text-stroke:${Math.max(1, look.border / 2)}px ${cssColor(look.borderColor, '#000000')}`, 'paint-order:stroke fill');
+    if (look.shadow) css.push(`text-shadow:${look.shadow.x / 2}px ${look.shadow.y / 2}px 1px ${cssColor(look.shadow.color, '#000000')}`);
+    if (look.box) css.push(`background:${cssColor(look.box, '#000000')}`, 'padding:1px 8px', 'border-radius:3px');
+    return css.join(';');
+}
 const option = (value, label, selected) => `<option value="${value}"${selected ? ' selected' : ''}>${label}</option>`;
 const basename = (p) => String(p || '').split(/[\\/]/).pop();
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
 const aspectOf = (format) => { const [w, h] = format.split('x').map(Number); return h > w ? 'portrait' : w === h ? 'square' : 'landscape'; };
+const formatAspect = (format) => { const [w, h] = String(format).split('x').map(Number); return w > 0 && h > 0 ? w / h : 16 / 9; };
 const aspectRatioParam = (format) => ({ portrait: '9:16', square: '1:1', landscape: '16:9' }[aspectOf(format)]);
 
 function loadProject() {
@@ -111,7 +142,8 @@ export function MovieStudio() {
             </div>
             <div class="mv-refs-box flex flex-col gap-2">
                 <div class="flex items-center gap-2"><span class="text-xs font-bold text-secondary">Reference pictures (characters, places, objects — up to 4)</span>
-                    <button class="mv-add-ref px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ From Image Studio</button></div>
+                    <button class="mv-add-ref px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ From Image Studio</button>
+                    <button class="mv-add-ref-file px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ From files</button></div>
                 <div class="mv-refs grid grid-cols-2 md:grid-cols-4 gap-2"></div>
             </div>
             <div class="flex flex-wrap items-center gap-3">
@@ -318,6 +350,7 @@ export function MovieStudio() {
                 <div class="flex-1 min-w-0 flex flex-col gap-2">
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-secondary truncate flex-1" title="${escapeHtml(scene.path)}">${escapeHtml(scene.label || (isTitle ? 'Title card' : basename(scene.path)))}</span>
+                        ${isImage ? '<button class="mv-edit-pic px-2 h-6 rounded bg-white/10 hover:bg-white/20 text-xs" title="Crop, rotate or adjust this picture">✂ Edit</button>' : ''}
                         <button class="mv-up w-6 h-6 rounded bg-white/10 hover:bg-white/20 text-xs" title="Move earlier">↑</button>
                         <button class="mv-down w-6 h-6 rounded bg-white/10 hover:bg-white/20 text-xs" title="Move later">↓</button>
                         <button class="mv-del w-6 h-6 rounded bg-white/10 hover:bg-red-500/80 text-xs" title="Remove">✕</button>
@@ -333,6 +366,13 @@ export function MovieStudio() {
                 if (scene.thumb) media.src = scene.thumb;
                 else api().url(scene.path).then((url) => { if (url) { scene.thumb = url; media.src = url; } });
             }
+            const editPic = card.querySelector('.mv-edit-pic');
+            if (editPic) editPic.onclick = async () => {
+                try {
+                    const saved = await editPicture(scene.path);
+                    if (saved) { scene.path = saved.path; scene.thumb = saved.url; persist(); renderScenes(); }
+                } catch (err) { showError(err.message); }
+            };
             card.querySelector('.mv-up').onclick = () => moveScene(index, -1);
             card.querySelector('.mv-down').onclick = () => moveScene(index, 1);
             card.querySelector('.mv-del').onclick = () => { state.scenes.splice(index, 1); persist(); renderScenes(); };
@@ -419,9 +459,69 @@ export function MovieStudio() {
                 wrap.appendChild(select);
                 styleRow.appendChild(wrap);
             };
+            // A style is chosen from a drop-down whose entries are written in their own typeface.
+            const pickStyle = (kind, label, list, key, fallbackId) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'relative flex items-center gap-1.5';
+                wrap.append(label);
+                const current = () => list.find(([v]) => v === (scene[key] || fallbackId)) || list[0] || [fallbackId, fallbackId, '', { font: 'sans' }];
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'flex items-center gap-2 rounded-lg bg-white/5 border border-white/10 px-2.5 py-1 text-white hover:bg-white/10 max-w-[260px]';
+                const name = document.createElement('span');
+                name.className = 'truncate';
+                const caret = document.createElement('span');
+                caret.className = 'text-[10px] text-secondary';
+                caret.textContent = '▾';
+                button.append(name, caret);
+                const paint = () => { const [, text, , look] = current(); name.textContent = text; name.style.cssText = lookCss(look || { font: 'sans' }); };
+                loadStyleFonts().then(paint);
+                paint();
+                const closeMenu = () => { wrap.querySelector('.mv-style-menu')?.remove(); document.removeEventListener('mousedown', outside, true); };
+                const outside = (e) => { if (!wrap.contains(e.target)) closeMenu(); };
+                button.onclick = async () => {
+                    if (wrap.querySelector('.mv-style-menu')) { closeMenu(); return; }
+                    await loadStyleFonts();
+                    const menu = document.createElement('div');
+                    menu.className = 'mv-style-menu absolute left-0 top-full mt-1 z-50 w-80 max-h-96 overflow-auto rounded-xl bg-[#101014] border border-white/15 shadow-2xl py-1';
+                    let lastGroup = null;
+                    for (const [id, text, group, look] of list) {
+                        if (group !== lastGroup) {
+                            lastGroup = group;
+                            const head = document.createElement('div');
+                            head.className = 'px-3 pt-2 pb-1 text-[10px] font-semibold tracking-[0.16em] uppercase text-secondary';
+                            head.textContent = group;
+                            menu.appendChild(head);
+                        }
+                        const item = document.createElement('button');
+                        item.type = 'button';
+                        item.className = `w-full text-left px-3 py-1.5 hover:bg-white/10 ${id === current()[0] ? 'bg-white/[0.08]' : ''}`;
+                        const sample = document.createElement('span');
+                        sample.textContent = text;
+                        sample.style.cssText = `${lookCss(look)};display:block;overflow:hidden;text-overflow:ellipsis`;
+                        item.appendChild(sample);
+                        item.onclick = () => { scene[key] = id; persist(); closeMenu(); paint(); };
+                        menu.appendChild(item);
+                    }
+                    const all = document.createElement('button');
+                    all.type = 'button';
+                    all.className = 'w-full text-left px-3 py-2 mt-1 border-t border-white/10 text-[11px] text-secondary hover:bg-white/10';
+                    all.textContent = 'Use the current style for every scene';
+                    all.onclick = () => {
+                        const id = current()[0];
+                        for (const sc of state.scenes) { if (kind === 'title' ? (sc.kind === 'title' || String(sc.title || '').trim()) : sc.kind !== 'title') sc[key] = id; }
+                        persist(); closeMenu(); renderScenes();
+                    };
+                    menu.appendChild(all);
+                    wrap.appendChild(menu);
+                    document.addEventListener('mousedown', outside, true);
+                };
+                wrap.appendChild(button);
+                styleRow.appendChild(wrap);
+            };
             if (index > 0) pick('Transition in', TRANSITIONS, 'transitionIn', 'Same as the project', 'How this scene replaces the previous one');
             if (isTitle || String(scene.title || '').trim()) {
-                pick('Title style', TITLE_STYLES, 'titleStyle', null);
+                pickStyle('title', 'Title style', TITLE_STYLES, 'titleStyle', 'classic');
                 const colorWrap = document.createElement('label');
                 colorWrap.className = 'flex items-center gap-1.5';
                 colorWrap.append('Color');
@@ -433,7 +533,7 @@ export function MovieStudio() {
                 colorWrap.appendChild(color);
                 styleRow.appendChild(colorWrap);
             }
-            if (!isTitle) pick('Caption style', CAPTION_STYLES, 'captionStyle', null);
+            if (!isTitle) pickStyle('caption', 'Caption style', CAPTION_STYLES, 'captionStyle', 'subtitle');
 
             // Redo a generated shot with a new description (the old take stays available).
             const redo = card.querySelector('.mv-redo');
@@ -447,6 +547,73 @@ export function MovieStudio() {
                         <span class="mv-redo-status"></span>
                     </div>
                     <div class="mv-takes flex flex-wrap items-end gap-2"></div>`;
+                // The reference pictures this shot is made from: shown here, and changeable for this shot only.
+                const refsBox = document.createElement('div');
+                refsBox.className = 'flex flex-wrap items-center gap-2 text-xs text-secondary';
+                redo.prepend(refsBox);
+                const drawRefs = () => {
+                    const refs = gensFor(scene).refs;
+                    refsBox.innerHTML = `<span class="basis-full text-[11px]">Reference pictures of this shot (up to 4). Use the ones that show what the object really looks like:</span>`;
+                    refs.forEach((ref, k) => {
+                        const cell = document.createElement('div');
+                        cell.className = 'relative w-20 h-20 rounded-lg overflow-hidden bg-black/50 border border-white/10';
+                        cell.title = `${ref.name || ref.role}: ${ref.path}`;
+                        cell.innerHTML = `<img class="w-full h-full object-cover" alt=""><button type="button" class="ref-edit absolute bottom-0 left-0 right-0 h-5 bg-black/70 hover:bg-white/30 text-[10px]" title="Crop, rotate or adjust this picture">✂ Edit</button><button type="button" class="ref-del absolute top-0 right-0 w-5 h-5 bg-black/70 hover:bg-red-500/80 text-[10px]" title="Remove">✕</button>`;
+                        api().url(ref.path).then((u) => { if (u) cell.querySelector('img').src = u; });
+                        cell.querySelector('.ref-del').onclick = () => { scene.gen = { ...gensFor(scene), refs: refs.filter((_, i) => i !== k) }; persist(); drawRefs(); };
+                        cell.querySelector('.ref-edit').onclick = async () => {
+                            try {
+                                const saved = await editPicture(ref.path);
+                                if (saved) { scene.gen = { ...gensFor(scene), refs: refs.map((r, i) => (i === k ? { ...r, path: saved.path } : r)) }; persist(); drawRefs(); }
+                            } catch (err) { showError(err.message); }
+                        };
+                        refsBox.appendChild(cell);
+                    });
+                    const add = document.createElement('button');
+                    add.type = 'button';
+                    add.className = 'px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold';
+                    add.textContent = '+ Add a picture';
+                    add.disabled = refs.length >= 4;
+                    refsBox.appendChild(add);
+                    // One click adds a picture already used in the director or in another shot; "From files" takes a new one.
+                    const choices = document.createElement('div');
+                    choices.className = 'hidden basis-full flex flex-wrap items-center gap-2 rounded-lg bg-white/[0.04] border border-white/10 p-2';
+                    refsBox.appendChild(choices);
+                    const put = (ref) => {
+                        const list = gensFor(scene).refs.slice();
+                        if (list.length >= 4 || list.some((r) => r.path === ref.path)) return;
+                        list.push({ path: ref.path, role: ref.role || 'object', name: ref.name || `Ref${list.length + 1}`, sheet: !!ref.sheet });
+                        scene.gen = { ...gensFor(scene), refs: list };
+                        persist();
+                        drawRefs();
+                    };
+                    add.onclick = () => {
+                        choices.classList.toggle('hidden');
+                        if (choices.classList.contains('hidden')) return;
+                        choices.innerHTML = '<span class="basis-full text-[11px]">Pictures already in this movie. Click one to add it to this shot:</span>';
+                        const seen = new Set(gensFor(scene).refs.map((r) => r.path));
+                        const pool = [...director.refs.map((r, k) => ({ path: r.path, role: r.role, name: refName(r, k), sheet: r.sheet })), ...state.scenes.flatMap((sc) => sc.gen?.refs || [])];
+                        for (const ref of pool) {
+                            if (seen.has(ref.path)) continue;
+                            seen.add(ref.path);
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'relative w-16 h-16 rounded-lg overflow-hidden bg-black/50 border border-white/10 hover:border-primary/60';
+                            b.title = ref.name || ref.path;
+                            b.innerHTML = '<img class="w-full h-full object-cover" alt="">';
+                            api().url(ref.path).then((u) => { if (u) b.querySelector('img').src = u; });
+                            b.onclick = () => put(ref);
+                            choices.appendChild(b);
+                        }
+                        const files = document.createElement('button');
+                        files.type = 'button';
+                        files.className = 'px-2 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold';
+                        files.textContent = 'From files…';
+                        files.onclick = async () => { for (const file of (await api().pick('image')) || []) put({ path: file }); };
+                        choices.appendChild(files);
+                    };
+                };
+                drawRefs();
                 const story = redo.querySelector('.mv-redo-story');
                 story.value = scene.gen?.story || scene.prompt || '';
                 story.oninput = () => { scene.gen = { ...gensFor(scene), story: story.value }; persist(); };
@@ -612,7 +779,7 @@ export function MovieStudio() {
             const result = await window.localAI.h3.generate({
                 images: refs.map((r, k) => ({ name: `ref-${k}.png`, path: r.path })),
                 spec: { refs: refs.map((r) => ({ role: r.role, name: r.name, sheet: !!r.sheet, tag: r.name })), story: withContinuityStory(gen.story, refs), style: gen.style, sound: gen.sound || '', voices: false },
-                seconds: gen.seconds || 6, ...shotQuality(), audio: 'on', seed,
+                seconds: gen.seconds || 6, ...shotQuality(), aspect: formatAspect(state.format), audio: 'on', seed,
             });
             const [info] = await api().probe([result.path]);
             takesOf(scene); // keeps the version being replaced
@@ -909,7 +1076,7 @@ export function MovieStudio() {
         director.refs.forEach((ref, index) => {
             const card = document.createElement('div');
             card.className = 'rounded-xl bg-white/5 border border-white/10 p-2 flex flex-col gap-1.5';
-            card.innerHTML = `<div class="relative aspect-video rounded-lg overflow-hidden bg-black/40"><img class="w-full h-full object-contain" alt=""><button class="mv-ref-del absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 hover:bg-red-500/80 text-xs" title="Remove">✕</button></div>
+            card.innerHTML = `<div class="relative aspect-video rounded-lg overflow-hidden bg-black/40"><img class="w-full h-full object-contain" alt=""><button class="mv-ref-edit absolute top-1 left-1 px-2 h-6 rounded-full bg-black/70 hover:bg-white/30 text-xs" title="Crop, rotate or adjust this picture">✂ Edit</button><button class="mv-ref-del absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 hover:bg-red-500/80 text-xs" title="Remove">✕</button></div>
                 <div class="flex gap-1"><select class="mv-ref-role rounded-lg bg-white/5 border border-white/10 px-1 py-1 text-xs text-white">${ROLE_LIST.map(([v, l]) => option(v, l, v === ref.role)).join('')}</select>
                 <input class="mv-ref-name min-w-0 flex-1 rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-xs text-white" placeholder="Name, e.g. Commander"></div>
                 <label class="flex items-center gap-1.5 text-[10px] text-secondary" title="The picture shows the same character or place from several sides"><input type="checkbox" class="mv-ref-sheet accent-primary"> contact sheet (several views)</label>`;
@@ -921,6 +1088,12 @@ export function MovieStudio() {
             const sheet = card.querySelector('.mv-ref-sheet');
             sheet.checked = !!ref.sheet;
             sheet.onchange = () => { ref.sheet = sheet.checked; saveDirector(); };
+            card.querySelector('.mv-ref-edit').onclick = async () => {
+                try {
+                    const saved = await editPicture(ref.path);
+                    if (saved) { ref.path = saved.path; ref.thumb = saved.url; renderRefs(); renderShots(); }
+                } catch (err) { showError(err.message); }
+            };
             card.querySelector('.mv-ref-del').onclick = () => { director.refs.splice(index, 1); renderRefs(); renderShots(); };
             dir.refs.appendChild(card);
         });
@@ -1054,7 +1227,7 @@ export function MovieStudio() {
                                 refs: refs.map((r) => ({ role: r.role, name: r.name, sheet: !!r.sheet, tag: r.name })),
                                 story, style: dir.style.value, sound: shot.sound || '', voices: false,
                             },
-                            seconds: Number(dir.shotSec.value) || 6, ...shotQuality(), audio: 'on',
+                            seconds: Number(dir.shotSec.value) || 6, ...shotQuality(), aspect: formatAspect(state.format), audio: 'on',
                         });
                     } finally { offH3?.(); }
                     checkStop();
@@ -1126,6 +1299,14 @@ export function MovieStudio() {
         renderRefs();
         renderShots();
     });
+    $('.mv-add-ref-file').onclick = async () => {
+        for (const file of (await api().pick('image')) || []) {
+            if (director.refs.length >= 4) { showError('At most 4 reference pictures fit.'); break; }
+            try { director.refs.push({ path: file, thumb: await api().url(file), role: director.refs.length === 0 ? 'character' : 'object', name: '', notes: '', sheet: false }); } catch (err) { showError(err.message); }
+        }
+        renderRefs();
+        renderShots();
+    };
     if (!window.localAI.h3) { dir.engine.querySelector('option[value="h3"]').remove(); }
     try { dir.quality.value = localStorage.getItem('movie-shot-quality') || 'standard'; } catch { /* storage unavailable */ }
     dir.quality.onchange = () => { try { localStorage.setItem('movie-shot-quality', dir.quality.value); } catch { /* storage unavailable */ } };

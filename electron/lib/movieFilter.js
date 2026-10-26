@@ -124,7 +124,7 @@ function buildMovieArgs(project, outPath) {
         }
         // Caption and title texts are read from files (see captionFileText), so no escaping of quotes,
         // colons or percent signs is needed inside the filter graph.
-        for (const filter of [...captionFilters({ clip, dur, h, fonts: project.fonts, fontFile: project.fontFile }), ...titleFilters({ clip, dur, w, h, fonts: project.fonts, fontFile: project.fontFile })]) video += `,${filter}`;
+        for (const filter of [...captionFilters({ clip, dur, w, h, fonts: project.fonts, fontFile: project.fontFile }), ...titleFilters({ clip, dur, w, h, fonts: project.fonts, fontFile: project.fontFile })]) video += `,${filter}`;
         // Every clip is made exactly `dur` long so the transition maths below is exact.
         video += `,trim=duration=${round3(dur)},setpts=PTS-STARTPTS[v${i}]`;
         filters.push(video);

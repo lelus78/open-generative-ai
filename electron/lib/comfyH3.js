@@ -274,6 +274,7 @@ async function generate(params, mainWindow) {
         const graph = buildH3Graph({
             prompt, images: names, seconds: params.seconds, megapixels: params.megapixels,
             upscaleMegapixels: wantsUpscale ? params.upscaleMegapixels : 0, seed, audio: params.audio !== 'off',
+            ...(params.aspect > 0 ? { aspect: params.aspect } : {}),
         });
         const clientId = crypto.randomUUID();
         let promptId = null;
