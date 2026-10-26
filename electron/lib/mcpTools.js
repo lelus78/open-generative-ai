@@ -67,7 +67,20 @@ function imageResult(result, summary) {
 function createTools(deps) {
     const emit = (event) => { try { deps.notify?.(event); } catch { /* UI feedback is optional */ } };
 
-    async function runImageJob({ tool, kind, model, params, prompt }) {
+    /** With a shared job list (the app) a picture is a job: the tool waits a little and answers with a job id when the model is still loading. */
+    async function runImageJob(args, waitSeconds) {
+        if (!deps.jobs) return runImageNow(args);
+        const job = deps.jobs.start({
+            name: `${args.kind === 'edit' ? 'edit' : 'image'} with ${args.model.name}`, lane: 'gpu', cancel: deps.cancel,
+            run: async () => { const out = await runImageNow(args); return { summary: out.content.find((c) => c.type === 'text')?.text || '', content: out.content }; },
+        });
+        await deps.jobs.wait(job, waitSeconds === undefined ? 50 : waitSeconds);
+        if (job.state === 'error') throw new Error(job.error);
+        if (job.state === 'done') return { content: job.result.content };
+        return { content: [text(`${job.id} (${job.name}) is ${job.state === 'queued' ? 'waiting for the engine to be free' : 'still running'} (a heavy model needs minutes the first time it is loaded). Ask again with job_status ${job.id} and wait_seconds.`)] };
+    }
+
+    async function runImageNow({ tool, kind, model, params, prompt }) {
         emit({ phase: 'start', tool, model: model.id, modelName: model.name, prompt });
         try {
             const result = await deps.generate({ ...params, model: model.id });
@@ -121,16 +134,17 @@ function createTools(deps) {
                     negative_prompt: { type: 'string' },
                     seed: { type: 'integer', description: 'Same seed + same prompt gives the same image. Omit for random.' },
                     steps: { type: 'integer', description: 'Sampling steps. Omit to use the model default.' },
+                    wait_seconds: { type: 'integer', minimum: 0, maximum: 55, description: 'Seconds to wait for the picture before answering with a job id (default 50). job_status keeps waiting.' },
                 },
                 required: ['prompt'],
             },
-            run: async ({ prompt, model, aspect_ratio, negative_prompt, seed, steps }) => {
+            run: async ({ prompt, model, aspect_ratio, negative_prompt, seed, steps, wait_seconds }) => {
                 if (!String(prompt || '').trim()) throw new Error('prompt is required.');
                 const picked = pickModel(await deps.listModels(), 'image', model);
                 return runImageJob({
                     tool: 'generate_image', kind: 'image', model: picked, prompt,
                     params: { prompt, aspect_ratio: ASPECT_RATIOS.includes(aspect_ratio) ? aspect_ratio : '1:1', negative_prompt, seed, steps },
-                });
+                }, wait_seconds);
             },
         },
         {
@@ -144,10 +158,11 @@ function createTools(deps) {
                     model: { type: 'string', description: 'An edit model id or name (see list_models with kind "edit")' },
                     aspect_ratio: { type: 'string', enum: ASPECT_RATIOS, description: 'Default 1:1; pick the one closest to the picture' },
                     seed: { type: 'integer' },
+                    wait_seconds: { type: 'integer', minimum: 0, maximum: 55, description: 'Seconds to wait for the result before answering with a job id (default 50). job_status keeps waiting.' },
                 },
                 required: ['image_path', 'prompt'],
             },
-            run: async ({ image_path, prompt, model, aspect_ratio, seed }) => {
+            run: async ({ image_path, prompt, model, aspect_ratio, seed, wait_seconds }) => {
                 if (!String(prompt || '').trim()) throw new Error('prompt is required.');
                 if (!path.isAbsolute(String(image_path || '')) || !fs.existsSync(image_path) || !fs.statSync(image_path).isFile()) {
                     throw new Error('image_path must be the absolute path of an existing picture.');
@@ -157,7 +172,7 @@ function createTools(deps) {
                 return runImageJob({
                     tool: 'edit_image', kind: 'edit', model: picked, prompt,
                     params: { prompt, image: image_path, aspect_ratio: ASPECT_RATIOS.includes(aspect_ratio) ? aspect_ratio : '1:1', seed },
-                });
+                }, wait_seconds);
             },
         },
         {

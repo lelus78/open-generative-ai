@@ -115,7 +115,7 @@ function buildMediaDeps(deps) {
 async function startServer(settings) {
     await stopServer();
     startError = null;
-    const deps = buildDeps();
+    const deps = { ...buildDeps(), jobs };
     const handle = createHandler({ name: 'open-generative-ai', version: app.getVersion(), tools: [...createTools(deps), ...createMediaTools(buildMediaDeps(deps))] });
     try {
         server = await start({ port: settings.port, token: settings.token, handle });

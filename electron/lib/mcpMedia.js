@@ -544,6 +544,7 @@ function createMediaTools(deps) {
                 if (!job) throw new Error(`No job ${a.job_id}. list_jobs shows the recent ones.`);
                 await jobs.wait(job, a.wait_seconds === undefined ? 25 : a.wait_seconds);
                 if (job.state === 'error') throw new Error(`${job.id} failed: ${job.error}`);
+                if (job.state === 'done' && job.result?.content) return { content: job.result.content }; // a finished picture comes back with the picture
                 return { content: [text(describeJob(job))] };
             },
         },

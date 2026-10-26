@@ -133,9 +133,9 @@ test('make_lipsync needs a portrait and an audio file', async () => {
 });
 
 test('h3_shot validates the references and shapes the generator parameters', async () => {
-    const p = buildH3Params({ story: 'Ambra raises the axe', references: [{ path: pic, role: 'character', name: 'Ambra' }, { path: pic }], aspect_ratio: '9:16', quality: 'sharp', seconds: 4, seed: 7 });
+    const p = buildH3Params({ story: 'The hero raises the axe', references: [{ path: pic, role: 'character', name: 'Hero' }, { path: pic }], aspect_ratio: '9:16', quality: 'sharp', seconds: 4, seed: 7 });
     assert.equal(p.images.length, 2);
-    assert.equal(p.spec.refs[0].tag, 'Ambra');
+    assert.equal(p.spec.refs[0].tag, 'Hero');
     assert.equal(p.spec.refs[1].role, 'object');
     assert.equal(p.upscale, true);
     assert.ok(Math.abs(p.aspect - 9 / 16) < 1e-9);
@@ -155,7 +155,7 @@ test('movie_render builds the project, checks style and transition ids and retur
         scenes: [
             { type: 'video', path: clip, trim_seconds: 3.5, caption: 'Hello', caption_style: 'cinzel' },
             { path: pic, duration: 3, motion: 'zoom-out', title: 'Big', title_style: 'classic' },
-            { title: 'The end', subtitle: 'ambryslab', duration: 2 },
+            { title: 'The end', subtitle: 'example.com', duration: 2 },
         ],
     };
     const project = buildMovieProject(args, { options });

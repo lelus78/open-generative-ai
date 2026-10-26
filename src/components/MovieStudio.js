@@ -1324,7 +1324,37 @@ export function MovieStudio() {
     function renderSetup() {
         const bad = !status?.ok;
         els.setup.classList.toggle('hidden', !bad);
-        els.setup.textContent = bad ? `${status?.error || 'ffmpeg is missing'}. The movie maker uses the ffmpeg that comes with Wan2GP: install Wan2GP from Settings → Local Models, or put ffmpeg.exe in the local-ai/tools/ffmpeg folder.` : '';
+        els.setup.innerHTML = '';
+        if (bad) {
+            const text = document.createElement('p');
+            text.textContent = `${status?.error || 'ffmpeg is missing'}. The movie maker needs ffmpeg 4.3 or newer.`;
+            els.setup.appendChild(text);
+            if (/win/i.test(navigator.userAgent) && api().installFfmpeg) {
+                const row = document.createElement('div');
+                row.className = 'mt-3 flex flex-wrap items-center gap-3';
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'px-4 py-2 rounded-xl bg-primary text-black text-sm font-bold hover:opacity-90 disabled:opacity-40';
+                button.textContent = 'Install ffmpeg (one click, about 100 MB)';
+                const note = document.createElement('span');
+                note.className = 'text-xs text-secondary';
+                note.textContent = 'Or install Wan2GP from Settings → Local Models: it brings ffmpeg.';
+                button.onclick = async () => {
+                    button.disabled = true;
+                    const off = api().onFfmpegProgress?.((e) => { note.textContent = e.phase === 'downloading' ? `Downloading… ${e.percent || 0}%` : e.phase === 'unpacking' ? 'Unpacking…' : e.phase === 'error' ? e.message : 'Done'; });
+                    try {
+                        await api().installFfmpeg();
+                        status = await api().status();
+                        renderSetup();
+                    } catch (err) {
+                        note.textContent = err.message;
+                        button.disabled = false;
+                    } finally { off?.(); }
+                };
+                row.append(button, note);
+                els.setup.appendChild(row);
+            }
+        }
         renderTotal();
     }
 

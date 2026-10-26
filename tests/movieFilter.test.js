@@ -6,7 +6,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const { buildMovieArgs, parseProgress, parseProbe, captionFileText } = require('../electron/lib/movieFilter');
 
-const FFMPEG = ['E:/Docker image/Wan2GP/Wan2GP/ffmpeg_bins/ffmpeg.exe', 'ffmpeg'].find((b) => {
+const FFMPEG = [process.env.FFMPEG_BIN, 'ffmpeg'].filter(Boolean).find((b) => {
     const r = spawnSync(b, ['-version'], { encoding: 'utf8' });
     return !r.error && r.status === 0 && /version (n?[5-9]|n?\d{2})/.test(r.stdout);
 });

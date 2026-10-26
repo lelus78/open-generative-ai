@@ -143,3 +143,19 @@ test('recentResults lists the newest media first', () => {
     const list = recentResults(dir, 5);
     assert.deepEqual(list.map(i => path.basename(i.path)), ['b.jpg', 'a.png']);
 });
+
+test('with a shared job list a slow picture answers with a job id and the picture is found later', async () => {
+    const { createJobs } = require('../electron/lib/mcpMedia');
+    const jobs = createJobs();
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    const deps = fakeDeps({ jobs, generate: async () => { await gate; return { url: 'data:image/png;base64,AAAA', path: 'C:/x/slow.png', seed: 1 }; } });
+    const gen = createTools(deps).find((t) => t.name === 'generate_image');
+    const first = await gen.run({ prompt: 'una volpe', wait_seconds: 0 });
+    assert.match(first.content[0].text, /job-\d+/);
+    release();
+    const job = jobs.list()[0];
+    await jobs.wait(job, 5);
+    assert.equal(job.state, 'done');
+    assert.match(job.result.content[0].text, /slow\.png/);
+});

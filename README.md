@@ -14,6 +14,10 @@
 - **A movie studio.** An AI director turns an idea and your own pictures into a finished video, with titles, 32 transitions, local music and sound effects and a final upscale. [Details](#make-a-whole-movie-from-your-own-pictures).
 - **Your files stay yours.** History survives restarts, a **Folders** button opens the result folders, nothing is uploaded.
 
+## Download (Windows)
+
+Grab **Open Generative AI Setup &lt;version&gt;.exe** from the [Releases page](https://github.com/lelus78/open-generative-ai/releases) (about 90 MB, unsigned: SmartScreen → *More info → Run anyway*). Step by step, from source and troubleshooting: [docs/INSTALL.md](docs/INSTALL.md).
+
 ## Quick start (Windows)
 
 Needs [Git](https://git-scm.com/) and [Node.js 18+](https://nodejs.org/). In PowerShell:
@@ -29,6 +33,16 @@ start.bat
 Then open **Settings → Local Models**: install the sd.cpp engine (one click), optionally **Install automatically** next to Wan2GP, and switch any studio to **⚡ Local**. Models download the first time you use them, and the picker tells you the size beforehand. `-ModelsDir D:\AI\local-ai` (or *Change folder* in Settings) keeps the multi-GB files on another drive.
 
 **Hardware.** sd.cpp runs on the CPU or most GPUs (Metal on Apple Silicon). Wan2GP needs an NVIDIA GPU: 12 GB of VRAM or more for Krea 2 / Kroma / HiDream, 8 GB for Ideogram v4 NF4 and the lighter models; plenty of RAM helps (the big models are quantized on the fly, 32–48 GB is comfortable). The first generation with a large model is slow because it is loaded, quantized and moved to the GPU once; the persistent server keeps it ready afterwards.
+
+## Examples
+
+Everything below was made on one PC (RTX 4080, 16 GB) with the app and its MCP server; the full 33 s demo was assembled by an assistant calling the app's tools. Prompts and numbers: [docs/examples](docs/examples/README.md).
+
+<p align="center"><img src="docs/examples/knight.jpg" width="440" alt="A knight in a misty valley"> <img src="docs/examples/alley.jpg" width="440" alt="A rainy cyberpunk alley"></p>
+<p align="center"><img src="docs/examples/tavern.jpg" width="440" alt="A tavern, original"> <img src="docs/examples/tavern-blue-fire.jpg" width="440" alt="Same tavern, edited: the fire is blue"></p>
+<p align="center"><sub>Top: images from a prompt (Z-Image Turbo, ~18 s each). Bottom: the same picture edited with one sentence, "make the fire a magical blue flame".</sub></p>
+<p align="center"><img src="docs/examples/clip-fox.webp" width="440" alt="Fox clip made from a picture"> <img src="docs/examples/clip-island.webp" width="440" alt="Floating island clip made from a picture"></p>
+<p align="center"><sub>Picture to video (Hunyuan Video 1.5), about 40–70 s per clip once the model is loaded.</sub></p>
 
 ## The studios
 

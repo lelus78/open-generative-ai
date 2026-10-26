@@ -91,6 +91,12 @@ contextBridge.exposeInMainWorld('localAI', {
     // ── Movie maker: join clips and pictures into one finished movie (ffmpeg, local) ──
     movie: {
         status:  () => ipcRenderer.invoke('movie:status'),
+        installFfmpeg: () => ipcRenderer.invoke('movie:install-ffmpeg'),
+        onFfmpegProgress: (callback) => {
+            const listener = (_, data) => callback(data);
+            ipcRenderer.on('movie:ffmpeg-progress', listener);
+            return () => ipcRenderer.removeListener('movie:ffmpeg-progress', listener);
+        },
         options: () => ipcRenderer.invoke('movie:options'),
         fontBytes: () => ipcRenderer.invoke('movie:font-bytes'),
         editPicture: (params) => ipcRenderer.invoke('movie:edit-picture', params),

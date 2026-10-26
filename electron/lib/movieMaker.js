@@ -49,10 +49,13 @@ const FONT_CANDIDATES = {
     condensed: ['C:/Windows/Fonts/bahnschrift.ttf'],
     mono: ['C:/Windows/Fonts/consola.ttf', '/System/Library/Fonts/Menlo.ttc', '/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'],
 };
+// ffmpeg is a separate program and cannot read inside app.asar: files that it needs are unpacked next to it (package.json → asarUnpack).
+const outsideAsar = (file) => file.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+
 function findFonts() {
     const fonts = {};
     for (const [role, list] of Object.entries(FONT_CANDIDATES)) {
-        const found = list.find((f) => fs.existsSync(f));
+        const found = list.map(outsideAsar).find((f) => fs.existsSync(f));
         if (found) fonts[role] = found;
     }
     return fonts;
@@ -64,7 +67,7 @@ fs.mkdirSync(IMPORTS_DIR, { recursive: true });
 // Wan2GP ships a recent ffmpeg (the transitions need 4.3+; older system builds lack xfade).
 let ffmpegCache;
 function ffmpegVersion(bin) {
-    const res = spawnSync(bin, ['-version'], { encoding: 'utf8', windowsHide: true, timeout: 8000 });
+    const res = spawnSync(bin, ['-version'], { encoding: 'utf8', windowsHide: true, timeout: 30000 }); // a new 100 MB exe can take a while to start the first time (antivirus scan)
     if (res.error || res.status !== 0) return null;
     const m = /ffmpeg version\s+n?(\d+)\.(\d+)/.exec(res.stdout || '');
     return m ? Number(m[1]) + Number(m[2]) / 100 : 0;
@@ -101,9 +104,78 @@ function findFfmpeg(refresh = false) {
 }
 function requireFfmpeg() {
     const found = findFfmpeg();
-    if (!found.bin) throw new Error('ffmpeg was not found. Install Wan2GP (it brings ffmpeg) or put ffmpeg.exe in local-ai/tools/ffmpeg.');
+    if (!found.bin) throw new Error('ffmpeg was not found. Press "Install ffmpeg" in the Movie tab, install Wan2GP (it brings ffmpeg) or put ffmpeg.exe in local-ai/tools/ffmpeg.');
     if (!found.ok) throw new Error(`The ffmpeg found (${found.bin}) is too old for transitions (need 4.3+).`);
     return found.bin;
+}
+
+
+// ─── One-click ffmpeg (Windows) ────────────────────────────────────────────────
+// The movie maker needs ffmpeg 4.3+. Wan2GP brings one; without it the official "essentials" build is downloaded next to the app's tools.
+const FFMPEG_ZIP_URL = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+let installingFfmpeg = false;
+
+async function installFfmpeg() {
+    if (process.platform !== 'win32') throw new Error('The one-click install is for Windows. On macOS use "brew install ffmpeg", on Linux your package manager (apt, dnf, pacman).');
+    if (installingFfmpeg) throw new Error('ffmpeg is already being installed.');
+    installingFfmpeg = true;
+    const send = (data) => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('movie:ffmpeg-progress', data); };
+    const dir = path.join(DATA_DIR, 'tools', 'ffmpeg');
+    const work = path.join(dir, '_download');
+    try {
+        fs.rmSync(work, { recursive: true, force: true });
+        fs.mkdirSync(work, { recursive: true });
+        send({ phase: 'downloading', percent: 0 });
+        const res = await fetch(FFMPEG_ZIP_URL, { redirect: 'follow' });
+        if (!res.ok || !res.body) throw new Error(`Could not download ffmpeg (${res.status}). You can put ffmpeg.exe in ${dir} yourself.`);
+        const total = Number(res.headers.get('content-length')) || 0;
+        const zip = path.join(work, 'ffmpeg.zip');
+        const out = fs.createWriteStream(zip);
+        let received = 0;
+        let last = 0;
+        for await (const chunk of res.body) {
+            out.write(chunk);
+            received += chunk.length;
+            const percent = total ? Math.round((received / total) * 100) : 0;
+            if (percent !== last) { last = percent; send({ phase: 'downloading', percent }); }
+        }
+        await new Promise((resolve, reject) => { out.end((err) => (err ? reject(err) : resolve())); });
+        send({ phase: 'unpacking', percent: 100 });
+        const unpacked = path.join(work, 'unpacked');
+        await new Promise((resolve, reject) => {
+            const child = spawn('powershell', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${unpacked}' -Force`], { windowsHide: true });
+            child.on('error', reject);
+            child.on('close', (code) => (code === 0 ? resolve() : reject(new Error('Could not unpack the ffmpeg download.'))));
+        });
+        const found = [];
+        const walk = (folder, depth) => {
+            if (depth > 3) return;
+            for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+                const full = path.join(folder, entry.name);
+                if (entry.isDirectory()) walk(full, depth + 1);
+                else if (/^ff(mpeg|probe)\.exe$/i.test(entry.name)) found.push(full);
+            }
+        };
+        walk(unpacked, 0);
+        const ffmpegExe = found.find((f) => /ffmpeg\.exe$/i.test(f));
+        if (!ffmpegExe) throw new Error('The ffmpeg download did not contain ffmpeg.exe.');
+        for (const file of found) fs.copyFileSync(file, path.join(dir, path.basename(file)));
+        let check = findFfmpeg(true);
+        for (let attempt = 0; attempt < 3 && !check.ok; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            check = findFfmpeg(true);
+        }
+        if (!check.ok) throw new Error('ffmpeg was installed but could not be started. Close and reopen the app, and try again.');
+        debug.info('movie', 'ffmpeg installed', { dir, version: check.version });
+        send({ phase: 'done', percent: 100 });
+        return { ok: true, version: check.version };
+    } catch (err) {
+        send({ phase: 'error', message: err.message });
+        throw err;
+    } finally {
+        installingFfmpeg = false;
+        fs.rmSync(work, { recursive: true, force: true });
+    }
 }
 
 // ─── Probe ─────────────────────────────────────────────────────────────────────
@@ -437,6 +509,7 @@ function register() {
         try { return { models: require('./comfyH3').bridge.upscaleModelFiles() }; } catch (err) { return { models: [], error: err.message }; }
     });
     const win = () => BrowserWindow.getAllWindows()[0] || null;
+    ipcMain.handle('movie:install-ffmpeg', () => installFfmpeg());
     ipcMain.handle('movie:status', () => {
         const f = findFfmpeg(true);
         return { ok: f.ok, ffmpeg: f.bin, version: f.version, error: f.ok ? '' : (f.bin ? 'ffmpeg is older than 4.3' : 'ffmpeg not found') };
