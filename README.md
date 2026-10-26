@@ -1,33 +1,98 @@
 # Open Generative AI — Local Edition
 
-**A desktop AI studio that runs on your own PC.** Generate and edit images, make video, lip-sync a portrait, direct "cinema" shots and **put a whole movie together (pictures, clips, titles, music and sound effects)** with no API key, no subscription and nothing leaving your machine — on top of the same studios that already worked with cloud models.
+**A desktop AI studio that runs on your own PC, and that your AI assistant can drive.** Generate and edit images, make video, lip-sync a portrait, direct "cinema" shots and **put a whole movie together (pictures, clips, titles, music and sound effects)** with no API key, no subscription and nothing leaving your machine. The app also runs a **local MCP server**, so Claude Code, Cursor or any MCP client can use your local models while the app is open.
 
-> This is a fork of [Anil-matcha/Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) (MIT). The original is a studio for cloud models with a thin layer of local support. **This fork turns the local side into the main feature**: it adds new engines and models, picks what your hardware can run, keeps your history, translates prompts, edits images and more. Everything the original does is still here (the original documentation is kept [at the end](#original-project-documentation)).
+> This is a fork of [Anil-matcha/Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) (MIT). The original is a cloud studio; **this fork makes the local side the main thing**: new engines and models, a hardware check for every model, history that survives restarts, prompt translation, picture editing, a movie studio and a music tab. The upstream documentation (cloud models, hosted version, installers) is kept in [docs/original-project.md](docs/original-project.md).
 
 <p align="center"><img src="docs/images/edit-demo.jpg" alt="Image edit with a prompt, all on a local GPU: original, red goggle frame, white fur" width="900"></p>
 <p align="center"><sub>Local image editing (Kroma Edit): one prompt each, the rest of the picture stays untouched. Generated on an RTX 4080.</sub></p>
 
-## Original vs. this fork
+## At a glance
 
-| | Original | This fork |
-|---|---|---|
-| **Main idea** | Cloud studio (Muapi API, 600+ models). Local inference is an add-on. | Local-first: every studio can run on your PC; cloud stays available. |
-| **Local engines** | sd.cpp (image only). Wan2GP only if you install it yourself and point the app to it. | sd.cpp **and** Wan2GP, with a **one-click Wan2GP install** (Python, PyTorch and Wan2GP, no git or conda needed). |
-| **Which studios work locally** | Image (sd.cpp / a few Wan2GP image models) and Video. | **Image, Video, Lip Sync and Cinema.** |
-| **Choosing a model** | A flat list. Easy to pick one that does not fit, start a 20 GB download and find out later. | Each model is rated against **the GPU, RAM and free disk of the PC running the app**: *Recommended / Heavy / Won't fit*, with the reason and download size. Already-downloaded models are marked, older ones are sorted last as *Legacy*. |
-| **Models** | Z-Image, SD 1.5, SDXL (sd.cpp); Flux, Qwen Image, Wan, Hunyuan, LTX (Wan2GP). | Adds Qwen Image 2.1, Ideogram v4, Krea 2 Turbo, **Kroma**, HiDream O1, Chroma, Wan 2.1 FusioniX, Hunyuan 720p / I2V and **InfiniteTalk** (lip sync). |
-| **Editing a picture** | Not available locally: an uploaded image was never sent to the local model, so it regenerated from scratch. | **Image edit with a prompt** ("make the dog black"): the picture is kept, only the change is applied. |
-| **Prompts** | Whatever you type. | **Local translation** to English (the models understand it far better), an **on/off button** in the top bar, and a **Prompt Enhancer** that can rewrite an idea into a detailed prompt with a local LLM. Translations are cached. |
-| **Speed** | A new Wan2GP process per generation: the model is read, quantized and loaded again every time. | One **persistent Wan2GP server**: the first image loads the model, the next ones start immediately (in my test the first edit took about 8 minutes, the next one 37 seconds). |
-| **History** | Lost on restart for local images; plain list. | **Survives restarts**, thumbnails, search, day groups, recover prompt, delete one or all (and the file on disk). |
-| **Usability** | — | Right-click menus, click-to-zoom, copy / paste / drag & drop pictures, ArrowUp for the last 10 prompts, a real progress phase (*downloading weights, translating, step n/N*), a folder picker for where the models go, Local/API choice remembered. |
-| **Making a whole movie** | Not available. | A **Movie studio**: an AI director writes the shots, your own pictures keep the objects and people looking right, and the app adds titles, transitions, music, sound effects and a final upscale. [See below](#make-a-whole-movie-from-your-own-pictures). |
-| **Music and sound effects** | Not available locally. | A **Music tab** that makes soundtracks and sound effects from a description, on your PC. |
-| **Where are my files?** | — | A **Folders** button in the top bar opens the folders where pictures, clips and movies are saved. |
-| **MCP & CLI tab** | Commands written for Claude, pointing at a cloud service. | Copy-paste setups for **Claude, Cursor, Windsurf, Gemini CLI, Cline, any MCP client** and a **DeepSeek** guide. |
-| **AI assistants controlling the app** | Not available. | A **local MCP server inside the app** (like the Blender MCP): Claude Code, Cursor or any MCP client can generate and edit images with your local models while the app is open, and the results appear in Image Studio. |
+- **Local first.** Image, Video, Lip Sync, Anime (H3), Movie, Music and Cinema all run on your GPU. Every local model is rated against your PC (*Recommended / Heavy / Won't fit*) before you download it.
+- **Driveable with MCP.** The app is an MCP server on `127.0.0.1` (off by default, token protected). Your assistant generates and edits images with the models you already have, and the results appear in the app. [Details](#the-app-as-an-mcp-server).
+- **A movie studio.** An AI director turns an idea and your own pictures into a finished video, with titles, 32 transitions, local music and sound effects and a final upscale. [Details](#make-a-whole-movie-from-your-own-pictures).
+- **Your files stay yours.** History survives restarts, a **Folders** button opens the result folders, nothing is uploaded.
 
-## See it
+## Quick start (Windows)
+
+Needs [Git](https://git-scm.com/) and [Node.js 18+](https://nodejs.org/). In PowerShell:
+
+```powershell
+git clone --recurse-submodules https://github.com/lelus78/open-generative-ai
+cd open-generative-ai
+powershell -ExecutionPolicy Bypass -File setup.ps1            # app only
+powershell -ExecutionPolicy Bypass -File setup.ps1 -Wan2GP    # + Wan2GP for the larger image models, video and lip sync (NVIDIA GPU)
+start.bat
+```
+
+Then open **Settings → Local Models**: install the sd.cpp engine (one click), optionally **Install automatically** next to Wan2GP, and switch any studio to **⚡ Local**. Models download the first time you use them, and the picker tells you the size beforehand. `-ModelsDir D:\AI\local-ai` (or *Change folder* in Settings) keeps the multi-GB files on another drive.
+
+**Hardware.** sd.cpp runs on the CPU or most GPUs (Metal on Apple Silicon). Wan2GP needs an NVIDIA GPU: 12 GB of VRAM or more for Krea 2 / Kroma / HiDream, 8 GB for Ideogram v4 NF4 and the lighter models; plenty of RAM helps (the big models are quantized on the fly, 32–48 GB is comfortable). The first generation with a large model is slow because it is loaded, quantized and moved to the GPU once; the persistent server keeps it ready afterwards.
+
+## The studios
+
+<p align="center"><img src="docs/images/studios-overview.jpg" alt="Image Studio, Video Studio, Lip Sync, Anime (H3), Cinema Studio and Music" width="900"></p>
+
+| Studio | What it does locally |
+|---|---|
+| **Image** | Text to image and **edit a picture with a prompt**; style presets, any aspect ratio, prompt enhancer, history. |
+| **Video** | Wan 2.1 / 2.2, FusioniX, Hunyuan 1.5 and LTX-2 through Wan2GP: text to video and image to video. |
+| **Lip Sync** | A portrait and an audio file become a talking video (InfiniteTalk). |
+| **Anime (H3)** | MiniMax H3 reference-to-video through your own ComfyUI: up to 4 reference pictures, a scene description, live preview. |
+| **Movie** | The AI director, per-shot references, picture editor, titles, transitions, music, final upscale. |
+| **Music** | Music and sound effects from a description, with Stable Audio 3. |
+| **Cinema** | Camera and lens settings turned into a visual look, with any ready image model. |
+| **MCP & CLI** | Copy-paste setups for Claude, Cursor, Windsurf, Gemini CLI, Cline and any MCP client. |
+
+## The app as an MCP server
+
+Settings → Local Models → **Let AI assistants use this app (MCP)**. It is off by default; when on, the app listens on `127.0.0.1` only, needs a random token, and refuses browser requests. The settings show a ready command, for Claude Code:
+
+```bash
+claude mcp add --transport http open-generative-ai http://127.0.0.1:47821/mcp \
+  --header "Authorization: Bearer <token shown in Settings>"
+```
+
+Then ask your assistant things like *"generate a fox in the snow at sunset"* or *"make the dog in /path/dog.png black"*. It works with the app open, and what it makes shows up in Image Studio (and its history) while it works. Tools: `list_models`, `generate_image`, `edit_image`, `enhance_prompt`, `recent_results`, `cancel_generation`. Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. The MCP tools cover images today; the Movie, Music and video studios are used from the app itself. The *MCP & CLI* tab shows the local server (URL, tools, a masked token) and ready setups for each client.
+
+## Connect any AI client (MCP & CLI)
+
+<p align="center"><img src="docs/images/mcp-connect.jpg" alt="MCP client setup generator" width="860"></p>
+
+## Make a whole movie from your own pictures
+
+The **Movie** tab turns an idea (or a few photos) into a finished video, all on your PC. You can use it in two ways: describe the movie and let the AI director do everything, or arrange pictures and clips yourself and finish them with titles, transitions and music.
+
+**1. Describe it, add the pictures that must look right.** The local writer (Qwen) turns the idea into shots. Pictures you add as *references* (an object, a place, a person) are what the video model (MiniMax H3) keeps faithful, so a real prop stays the real prop. Shots can be vertical (Reels, Shorts, TikTok), square or wide.
+
+<p align="center"><img src="docs/images/movie-director.jpg" alt="Movie tab: the AI director, with the idea, the quality of each shot and the reference pictures" width="900"></p>
+<p align="center"><sub>The AI director: the idea, how long and how sharp each shot is, and the reference pictures (faces blurred here). <b>✂ Edit</b> opens the picture editor below.</sub></p>
+
+**2. Each shot can be redone on its own.** Every shot shows the reference pictures it is made from: you can add, remove or edit them for that shot only (a face for the shots where it is seen, the whole object for the shot where only the object appears). The last three versions of a shot are kept, click one to use it. Titles and captions are chosen in the same place.
+
+<p align="center"><img src="docs/images/movie-text-styles.jpg" alt="A shot with its reference pictures, its description and the caption style menu, every style written in its own typeface" width="900"></p>
+<p align="center"><sub>One shot: its references, its description, <b>Redo this shot</b>, and the caption menu. Each style is shown in its own typeface and colour (28 title styles and 24 caption styles, grouped; the menu lists the ones whose font is on your PC).</sub></p>
+
+**3. Edit a picture without leaving the app.** Crop (free or to a fixed shape), rotate, flip, brightness, contrast and colour, for example to cut a face out of a bigger photo and use it as a reference. The original is never changed: the app uses a saved copy.
+
+<p align="center"><img src="docs/images/movie-picture-editor.jpg" alt="The picture editor: crop frame, rotate, flip and colour sliders" width="760"></p>
+
+**4. Music and sound effects, made on your PC.** The **Music** tab makes a soundtrack or a sound effect from a description (Stable Audio 3 through Wan2GP) and can send it to the movie. The director can also compose the music and the effects of a movie by itself.
+
+<p align="center"><img src="docs/images/music-tab.jpg" alt="The Music tab with its examples and a finished sound" width="860"></p>
+
+**5. Put it together and make it bigger.** 32 transitions, titles and captions, optional title cards (also as a transparent video you can use in another editor), the sound of the clips and the music mixed, then a **final upscale** to Full HD, 2K or 4K (a fast one that keeps faces natural, or an AI one in ComfyUI).
+
+<p align="center"><img src="docs/images/movie-final.jpg" alt="The Movie tab: look and sound settings, the finished movie, and the final upscale" width="900"></p>
+<p align="center"><sub>Look &amp; sound, the finished movie and the <b>Final upscale</b>. <b>Show in folder</b> opens the folder with the result.</sub></p>
+
+<p align="center"><img src="docs/images/movie-reel-result.jpg" alt="Five frames of a finished vertical reel: a white 3D print, being painted, held in a hand, in silhouette, ready" width="900"></p>
+<p align="center"><sub>A real result: a vertical Reel made from three photos of a hand-painted prop. The shots and the music were made by the app; titles and captions come from its styles (the person in the third frame is cropped and blurred).</sub></p>
+
+What it needs: **ffmpeg** (the one that comes with Wan2GP is found automatically) for everything; **Wan2GP** for the music and sound effects; and, for shots made from reference pictures, **MiniMax H3 in your own ComfyUI folder** (the app asks for the folder and tells you which files are missing). Tips that came out of real use: show the **whole object** in a reference when the shot must show it all; for a shot with a person, give one clear face picture and name that person in the shot description; strong side light makes any face look older, so prefer soft light or a backlit silhouette.
+
+## Models, history and settings
 
 ### Models that fit *your* PC
 The picker rates every local model against the machine the app runs on, so you do not download 20 GB to find out it will not run. Green *Downloaded* means it is already on disk.
@@ -53,46 +118,19 @@ Settings → Local Models: your hardware, the Wan2GP install (one click), where 
 
 <p align="center"><img src="docs/images/settings-models.jpg" alt="Local Models settings with fit badges" width="760"></p>
 
-### Connect any AI client (MCP & CLI)
-<p align="center"><img src="docs/images/mcp-connect.jpg" alt="MCP client setup generator" width="860"></p>
+## What this fork changes
 
-### Let an AI assistant drive the app (MCP)
-Settings → Local Models → **Let AI assistants use this app (MCP)**. It is off by default; when on, the app listens on `127.0.0.1` only, needs a random token, and refuses browser requests. The settings show a ready command, for Claude Code:
-
-```bash
-claude mcp add --transport http open-generative-ai http://127.0.0.1:47821/mcp \
-  --header "Authorization: Bearer <token shown in Settings>"
-```
-
-Then ask your assistant things like *"generate a fox in the snow at sunset"* or *"make the dog in /path/dog.png black"*. It works with the app open, and what it makes shows up in Image Studio (and its history) while it works. Tools: `list_models`, `generate_image`, `edit_image`, `enhance_prompt`, `recent_results`, `cancel_generation`. Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. This is different from the cloud MCP server in the *MCP & CLI* tab, which runs on someone else's servers.
-
-### Make a whole movie from your own pictures
-The **Movie** tab turns an idea (or a few photos) into a finished video, all on your PC. You can use it in two ways: describe the movie and let the AI director do everything, or arrange pictures and clips yourself and finish them with titles, transitions and music.
-
-**1. Describe it, add the pictures that must look right.** The local writer (Qwen) turns the idea into shots. Pictures you add as *references* (an object, a place, a person) are what the video model (MiniMax H3) keeps faithful, so a real prop stays the real prop. Shots can be vertical (Reels, Shorts, TikTok), square or wide.
-
-<p align="center"><img src="docs/images/movie-director.jpg" alt="Movie tab: the AI director, with the idea, the quality of each shot and the reference pictures" width="900"></p>
-<p align="center"><sub>The AI director: the idea, how long and how sharp each shot is, and the reference pictures (faces blurred here). <b>✂ Edit</b> opens the picture editor below.</sub></p>
-
-**2. Each shot can be redone on its own.** Every shot shows the reference pictures it is made from: you can add, remove or edit them for that shot only (a face for the shots where it is seen, the whole object for the shot where only the object appears). The last three versions of a shot are kept, click one to use it. Titles and captions are chosen in the same place.
-
-<p align="center"><img src="docs/images/movie-text-styles.jpg" alt="A shot with its reference pictures, its description and the caption style menu, every style written in its own typeface" width="900"></p>
-<p align="center"><sub>One shot: its references, its description, <b>Redo this shot</b>, and the caption menu. Each style is shown in its own typeface and colour (28 title styles and 24 caption styles, grouped; the menu lists the ones whose font is on your PC).</sub></p>
-
-**3. Edit a picture without leaving the app.** Crop (free or to a fixed shape), rotate, flip, brightness, contrast and colour, for example to cut a face out of a bigger photo and use it as a reference. The original is never changed: the app uses a saved copy.
-
-<p align="center"><img src="docs/images/movie-picture-editor.jpg" alt="The picture editor: crop frame, rotate, flip and colour sliders" width="760"></p>
-
-**4. Music and sound effects, made on your PC.** The **Music** tab makes a soundtrack or a sound effect from a description (Stable Audio 3 through Wan2GP) and can send it to the movie. The director can also compose the music and the effects of a movie by itself.
-
-<p align="center"><img src="docs/images/music-tab.jpg" alt="The Music tab with its examples and a finished sound" width="860"></p>
-
-**5. Put it together and make it bigger.** 32 transitions, titles and captions, optional title cards (also as a transparent video you can use in another editor), the sound of the clips and the music mixed, then a **final upscale** to Full HD, 2K or 4K (a fast one that keeps faces natural, or an AI one in ComfyUI).
-
-<p align="center"><img src="docs/images/movie-reel-result.jpg" alt="Five frames of a finished vertical reel: a white 3D print, being painted, held in a hand, in silhouette, ready" width="900"></p>
-<p align="center"><sub>A real result: a vertical Reel made from three photos of a hand-painted prop. The shots and the music were made by the app; titles and captions come from its styles (the person in the third frame is cropped and blurred).</sub></p>
-
-What it needs: **ffmpeg** (the one that comes with Wan2GP is found automatically) for everything; **Wan2GP** for the music and sound effects; and, for shots made from reference pictures, **MiniMax H3 in your own ComfyUI folder** (the app asks for the folder and tells you which files are missing). Tips that came out of real use: show the **whole object** in a reference when the shot must show it all; for a shot with a person, give one clear face picture and name that person in the shot description; strong side light makes any face look older, so prefer soft light or a backlit silhouette.
+| | Upstream | This fork |
+|---|---|---|
+| **Main idea** | A cloud studio with local inference as an add-on. | Local first: every studio can run on your PC. |
+| **Local engines** | sd.cpp (image only); Wan2GP if you install it yourself. | sd.cpp **and** Wan2GP, with a **one-click Wan2GP install** (Python, PyTorch and Wan2GP, no git or conda needed). |
+| **Choosing a model** | A flat list. | Each model is rated against the GPU, RAM and free disk of the PC running the app, with the reason and the download size. Older models are sorted last as *Legacy*. |
+| **Editing a picture** | Not available locally. | **Image edit with a prompt**: the picture is kept, only the change is applied. |
+| **Prompts** | Whatever you type. | **Local translation** to English (with an on/off button) and a **Prompt Enhancer** with a local LLM. |
+| **Speed** | A new Wan2GP process per generation. | One **persistent Wan2GP server**: the first image loads the model, the next ones start at once (first edit about 8 minutes, the next one 37 seconds in my test). |
+| **History** | Lost on restart for local images. | Survives restarts: thumbnails, search, day groups, recover a prompt, delete one or all (and the file). |
+| **Movies and sound** | Not available. | Movie studio, Music tab, **Folders** button, **Debug** panel. |
+| **AI assistants** | Not available. | A **local MCP server inside the app**. |
 
 ## What else changed
 
@@ -104,22 +142,6 @@ What it needs: **ffmpeg** (the one that comes with Wan2GP is found automatically
 - **Downloads:** guard against two downloads of the same file (which produced white images from a corrupted model), size check after every download, and a clear progress label (downloading, translating, loading, step n/N).
 - **Files:** every result can be deleted from the history (the file goes too); Settings shows the disk used and has *Delete all*. The model/output folder can be changed from the app.
 - **Windows setup:** `setup.ps1` and `start.bat` install and start everything; `scripts/install-wan2gp.ps1` installs Wan2GP from a terminal.
-
-## Quick start (Windows)
-
-Needs [Git](https://git-scm.com/) and [Node.js 18+](https://nodejs.org/). In PowerShell:
-
-```powershell
-git clone --recurse-submodules https://github.com/lelus78/open-generative-ai
-cd open-generative-ai
-powershell -ExecutionPolicy Bypass -File setup.ps1            # app only
-powershell -ExecutionPolicy Bypass -File setup.ps1 -Wan2GP    # + Wan2GP for the larger image models, video and lip sync (NVIDIA GPU)
-start.bat
-```
-
-Then open **Settings → Local Models**: install the sd.cpp engine (one click), optionally **Install automatically** next to Wan2GP, and switch any studio to **⚡ Local**. Models download the first time you use them, and the picker tells you the size beforehand. `-ModelsDir D:\AI\local-ai` (or *Change folder* in Settings) keeps the multi-GB files on another drive.
-
-**Hardware.** sd.cpp runs on the CPU or most GPUs (Metal on Apple Silicon). Wan2GP needs an NVIDIA GPU: 12 GB of VRAM or more for Krea 2 / Kroma / HiDream, 8 GB for Ideogram v4 NF4 and the lighter models; plenty of RAM helps (the big models are quantized on the fly, 32–48 GB is comfortable). The first generation with a large model is slow because it is loaded, quantized and moved to the GPU once; the persistent server keeps it ready afterwards.
 
 ## Local models at a glance
 
@@ -143,639 +165,10 @@ Each model's licence is its own; none of the weights are in this repository.
 - Results are saved in the local-AI data folder next to the models and referenced from the history, so deleting a result deletes its file.
 - Model catalogs live in `electron/lib/wan2gpCatalog.js` and `src/lib/localModels.js` (kept in step by tests), extra model definitions in `electron/finetunes/`. The unit tests run with `node --test tests/*.test.js`.
 
+## Cloud models (optional)
+
+The upstream project also works with cloud models through an API key (Settings → *API Key (optional)*). That path is not what this fork is about and is not needed for anything above; its documentation, the hosted version and the desktop installers are in [docs/original-project.md](docs/original-project.md).
+
 ## Credits
 
 Built on [Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) by Anil Matcha and contributors (MIT), [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp), [Wan2GP](https://github.com/deepbeepmeep/Wan2GP), [llama.cpp](https://github.com/ggml-org/llama.cpp), and the authors of the models listed above.
-
----
-
-# Original project documentation
-
-The rest of this file is the upstream README, kept for reference (cloud models, hosted version, desktop installers, API integration, architecture).
-
-## 💰 Turn This Into Your Own Product — White Label & Resell
-
-Want to launch this as **your own branded AI studio** and charge your own customers for it? [MuAPI White Label](https://muapi.ai/white-label?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai) lets you spin up a fully white-labeled version of this app — your logo, your colors, your custom domain, your own pricing — with zero infra to manage. You keep the markup on every generation; MuAPI handles the models, the queue, and the billing plumbing underneath.
-
-- **Your branding** — logo, color theme, and a custom domain (e.g. `studio.yourbrand.com`)
-- **Your pricing** — set your own credit/subscription prices for end users, keep the margin
-- **No infra** — no servers, workers, or model hosting to run yourself
-- **All studios included** — Image, Video, Audio, Lip Sync, Cinema, Workflows, and more, depending on plan
-
-Plans start at $49/mo. [Get started with White Label →](https://muapi.ai/white-label?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai)
-
-### What similar AI studios charge their users
-
-Consumer AI image/video platforms almost all run on paid monthly subscriptions — this is the same playbook you'd run under your own brand:
-
-| Platform | Typical subscription range |
-|---|---|
-| Midjourney | ~$10–$120/mo (Basic → Mega) |
-| Runway | ~$12–$76/mo (Standard → Unlimited), custom Enterprise |
-| Kling AI | ~$10–$92/mo across Standard → Premier tiers |
-| Luma Dream Machine | ~$10–$100+/mo |
-| Pika | ~$8–$58/mo |
-
-*(Figures are approximate, general-market ranges and change over time — check each platform's current pricing page before quoting them.)* With MuAPI White Label, you set these numbers yourself for your own end users — the subscription revenue is yours.
-
----
-
-## API examples and model references
-
-- [OpenAI API examples](https://github.com/Anil-matcha/OpenAI-API) — GPT Image, Sora, and GPT endpoints through Muapi.
-- [Google Gemini Media API examples](https://github.com/Anil-matcha/Google-Gemini-Media-API) — Nano Banana, Imagen, Veo, Gemini Omni, and speech endpoints.
-- [MiniMax Media API examples](https://github.com/Anil-matcha/MiniMax-Media-API) — Hailuo, H3 Max, speech, and music workflows.
-- [Kling Video API examples](https://github.com/Anil-matcha/Kling-Video-API) — Kling text-to-video, image-to-video, and motion control.
-- [Qwen Image API examples](https://github.com/Anil-matcha/Qwen-Image-API) — Qwen image generation, editing, and LoRA workflows through Muapi.
-
-## Related Projects
-
-This is a curated set of high-value hubs, popular distribution tools, and model-specific integrations rather than a directory of every related repository.
-
-- [awesome-vibecoded-saas](https://github.com/Anil-matcha/awesome-vibecoded-saas) — broader catalog of open-source SaaS alternatives featuring this studio.
-- [Muapi open-source alternatives](https://muapi.ai/open-source/alternative/midjourney) — compare this studio with the Midjourney workflow and its honest scope.
-- [awesome-generative-ai-apps](https://github.com/Anil-matcha/awesome-generative-ai-apps) — catalog of open-source generative-AI applications.
-- [awesome-ai-video-models](https://github.com/Anil-matcha/awesome-ai-video-models) — compare video models by API, price, and capability.
-- [awesome-ai-image-models](https://github.com/Anil-matcha/awesome-ai-image-models) — compare image models by API, price, and quality.
-- [AI-Youtube-Shorts-Generator](https://github.com/SamurAIGPT/AI-Youtube-Shorts-Generator) — Open-source Opus Clip alternative application.
-- [Open-AI-Design-Agent](https://github.com/Anil-matcha/Open-AI-Design-Agent) — Ppen-source autonomous AI design agent.
-- [muapi-skills](https://github.com/SamurAIGPT/muapi-skills) — Agent-ready skills for driving generative-media workflows.
-- [Seedance-2.5-API](https://github.com/SamurAIGPT/Seedance-2.5-API) — Python SDK for Seedance 2.5 video generation.
-
-## 🌐 Try it Online — No Install Required
-
-**Hosted version:** [https://muapi.ai/open-generative-ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai](https://muapi.ai/open-generative-ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai)
-
-Use all studios (Image, Video, Audio, AI Clipping, Vibe Motion, Lip Sync, Cinema, Marketing, Workflows, Agents, Design Agent, Apps, MCP & CLI) directly in your browser — no Node.js, no setup. Sign up for a free account to start generating. The hosted version is always up to date with the latest models.
-
-**Follow** the [creator](https://x.com/matchaman11) for updates
-
----
-
-## ⬇️ Download Desktop App
-
-One-click installers — no Node.js or terminal required.
-
-| Platform | Download |
-|---|---|
-| macOS Apple Silicon (M1/M2/M3/M4) | [Open Generative AI-2.0.0-arm64.dmg](https://github.com/Anil-matcha/Open-Generative-AI/releases/download/v2.0.0/Open.Generative.AI-2.0.0-arm64.dmg) |
-| macOS Intel (x64) | [Open Generative AI-2.0.0.dmg](https://github.com/Anil-matcha/Open-Generative-AI/releases/download/v2.0.0/Open.Generative.AI-2.0.0.dmg) |
-| Windows (x64) | [Open Generative AI Setup 2.0.0.exe](https://github.com/Anil-matcha/Open-Generative-AI/releases/download/v2.0.0/Open.Generative.AI.Setup.2.0.0.exe) |
-| Linux (Ubuntu x64) | [`.AppImage`](https://github.com/Anil-matcha/Open-Generative-AI/releases/download/v2.0.0/Open.Generative.AI-2.0.0.AppImage) / [`.deb`](https://github.com/Anil-matcha/Open-Generative-AI/releases/download/v2.0.0/open-generative-ai_2.0.0_amd64.deb), or build locally with `npm run electron:build:linux`. |
-
-All releases: [github.com/Anil-matcha/Open-Generative-AI/releases](https://github.com/Anil-matcha/Open-Generative-AI/releases)
-
-### macOS Installation Guide
-
-Because the app is not notarized by Apple, macOS Gatekeeper will block it on first launch. Follow these steps:
-
-**Step 1** — Mount the DMG and drag the app to `/Applications`
-
-**Step 2** — Open Terminal and run:
-```bash
-xattr -cr "/Applications/Open Generative AI.app"
-```
-
-**Step 3** — Right-click the app in `/Applications` → click **Open** → click **Open** again on the dialog
-
-> You only need to do this once. After that, the app opens normally.
-
-**Alternative (no Terminal):**
-1. Try to open the app — macOS will block it
-2. Go to **System Settings → Privacy & Security**
-3. Scroll down to find _"Open Generative AI was blocked"_
-4. Click **Open Anyway** → **Open**
-
-### Windows Installation — SmartScreen warning fix
-
-Windows SmartScreen may show a warning because the installer is not code-signed:
-
-1. Click **More info** on the SmartScreen dialog
-2. Click **Run anyway**
-
-The app will install silently to `%LocalAppData%` with a Start Menu shortcut.
-
-### Ubuntu / Linux Installation
-
-Linux artifacts are available when building with Electron Builder:
-
-```bash
-# Build Linux installers (AppImage + .deb)
-npm run electron:build:linux
-```
-
-Generated files are written to the `release/` folder:
-- **AppImage** — portable, run directly after making executable:
-  ```bash
-  chmod +x "release/Open Generative AI-*.AppImage"
-  ./release/Open\ Generative\ AI-*.AppImage
-  ```
-- **.deb** — install on Debian/Ubuntu:
-  ```bash
-  sudo apt install ./release/open-generative-ai_*_amd64.deb
-  ```
-
-If AppImage fails to start on older systems, install `libfuse2`:
-
-```bash
-sudo apt install libfuse2
-```
-
-#### Ubuntu 24.04+ / AppArmor sandbox restriction
-
-Ubuntu 24.04 and later enable a kernel security policy (`apparmor_restrict_unprivileged_userns`) that blocks Chromium's user-namespace sandbox. If the app fails to start silently or crashes immediately, you have two options:
-
-**Option A — Recommended: install the `.deb` instead.**
-The `.deb` package ships an AppArmor profile that grants the required permission automatically on install with no system-wide changes.
-
-**Option B — Temporary system fix (AppImage users):**
-```bash
-sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-```
-This lasts until next reboot. To make it permanent:
-```bash
-echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/99-userns.conf
-```
-
----
-
-Open Generative AI is a free, open-source AI image, video, cinema, and lip sync studio that brings creative workflows to everyone. No content filters, no prompt rejections, no guardrails — just full creative freedom. Powered by [Muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai), it supports text-to-image, image-to-image, text-to-video, image-to-video, and audio-driven lip sync generation across models like Flux, Nano Banana, Midjourney, Kling, Sora, Veo, Seedream, Infinite Talk, LTX Lipsync, Wan 2.2, and more — all from a sleek, modern interface you can self-host and customize.
-
-**Why Open Generative AI instead of other AI Video Platforms?**
-- **No filters** — no content filters, no nanny guardrails, no prompt rejections
-- **Free & open-source** — no subscription, no vendor lock-in
-- **Self-hosted** — your data stays on your machine, full creative control
-- **200+ models** — text-to-image, image-to-image, text-to-video, image-to-video, lip sync
-- **Multi-image input** — feed up to 14 reference images into compatible models
-- **Lip Sync Studio** — animate portraits or sync lips to any audio with 9 dedicated models
-- **Extensible** — add your own models, modify the UI, build on top of it
-
-For a deep dive into the technical architecture and the philosophy behind the "Infinite Budget" cinema workflow, see our [comprehensive guide and roadmap](https://medium.com/@anilmatcha/).
-
-## ⚡ Local Model Inference (Desktop App Only)
-
-The desktop app supports **two independent local engines**. Pick whichever fits the machine you actually run on:
-
-| Engine | What it is | Best for |
-|---|---|---|
-| **sd.cpp** (bundled) | C++ engine from [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp), runs on the same machine as the app. Metal GPU on Apple Silicon, CUDA/Vulkan/ROCm on Linux/Windows. | Image-only models. Works on Mac M-series. |
-| **Wan2GP** (BYO install) | A user-installed [Wan2GP](https://github.com/deepbeepmeep/Wan2GP): either its folder on this machine (the app runs `wgp.py` itself) or its MCP server on another machine. Python + PyTorch on a CUDA/ROCm GPU. | Video models (Wan 2.1/2.2, Hunyuan, LTX-2) in **Video Studio** and large image models (Flux, Qwen-Image). NVIDIA/AMD GPU required on the Wan2GP machine; the desktop app itself can run on a Mac. |
-
-Both engines share the same UI: open **Settings → Local Models** to configure each.
-
-### Engine 1 — sd.cpp (bundled)
-
-| Model | Type | Size | Notes |
-|---|---|---|---|
-| **Z-Image Turbo** ⚡ | Diffusion Transformer | 2.5 GB + 2.7 GB aux | 8-step turbo. Heavy on memory. |
-| **Z-Image Base** ⚡ | Diffusion Transformer | 3.5 GB + 2.7 GB aux | 50-step high-quality. Heavy on memory. |
-| **Dreamshaper 8** | SD 1.5 | 2.1 GB | 20-step versatile. Lightest tested option on Mac. |
-| **Realistic Vision v5.1** | SD 1.5 | 2.1 GB | 25-step photorealistic |
-| **Anything v5** | SD 1.5 | 2.1 GB | 20-step anime/illustration |
-| **SDXL Base 1.0** | SDXL | 6.9 GB | 30-step high-res |
-
-> **Z-Image models** require two shared auxiliary files (downloaded once, shared across both models):
-> - **Qwen3-4B Text Encoder** — 2.4 GB
-> - **FLUX VAE** — 335 MB
-
-**How to use:**
-1. Open **Settings → Local Models** in the desktop app
-2. Install the **sd.cpp inference engine** (one click — auto-downloaded)
-3. Download your chosen model (and auxiliary files for Z-Image)
-4. In **Image Studio**, click the **⚡ Local** toggle next to the model selector
-5. Select your local model and generate — no API key needed
-
-All downloads happen inside the app. Nothing is installed system-wide.
-
-By default, `sd.cpp` stores the engine, model weights, and temporary downloads under Electron's app data directory. Common paths are:
-
-- macOS: `~/Library/Application Support/open-generative-ai/local-ai`
-- Windows: `%APPDATA%\open-generative-ai\local-ai`
-- Linux: `~/.config/open-generative-ai/local-ai`
-
-To keep multi-GB model weights on another drive, set `OPEN_GENERATIVE_AI_LOCAL_AI_DIR`
-before launching the desktop app. The app will create `bin/`, `models/`, and `tmp/`
-inside that directory, and **Settings -> Local Models** shows the resolved model folder.
-Local engine output and download errors are written to the app process console, so launch
-from Terminal or PowerShell when you need troubleshooting logs.
-
-### Engine 2 — Wan2GP (your own install)
-
-The app does **not** bundle Python or model weights for Wan2GP. Install Wan2GP yourself on a machine with a CUDA or ROCm GPU:
-
-```bash
-git clone https://github.com/deepbeepmeep/Wan2GP
-cd Wan2GP
-./install.sh                          # or install.bat on Windows
-```
-
-**Same machine (recommended).** In the desktop app open **Settings → Local Models → Wan2GP**, set the Wan2GP folder (Python defaults to `<folder>/venv/bin/python`), click **Save**, then **Check** — it runs `wgp.py --dry-run` on a test task. Each generation runs Wan2GP's headless CLI (`wgp.py --process settings.json`); weights download automatically the first time a model is used, and the download shows up in the progress bar.
-
-**Another machine.** Start WanGP's MCP server there and put its URL (e.g. `http://192.168.1.42:7866/mcp`) in the same settings panel:
-
-```bash
-python wgp.py --mcp --mcp-api-version 1 --mcp-transport streamable-http --mcp-host 0.0.0.0 --mcp-port 7866
-```
-
-Use `--mcp-host 0.0.0.0` only on a trusted network (see Wan2GP's `docs/AUTHENTICATION.md` for OAuth/HTTPS). The Gradio web UI port (7860) is **not** an API and cannot be used here.
-
-Then switch **Video Studio** to **⚡ Local** and pick a model. Models your Wan2GP version doesn't have are listed with the reason; models whose weights aren't downloaded yet are marked.
-
-| Model | WanGP `model_type` | Type | Notes |
-|---|---|---|---|
-| **Wan 2.1 1.3B** | `t2v_1.3B` | Video | Lightest option, 480p, ~8 GB VRAM |
-| **Wan 2.2 14B T2V / I2V** | `t2v_2_2` / `i2v_2_2` | Video | 480p, slow on consumer GPUs; I2V needs a start frame |
-| **Hunyuan Video 1.5** | `hunyuan_1_5_480_t2v` | Video | 480p T2V |
-| **LTX-2 Distilled** | `ltx2_22B_distilled` | Video | 8 steps, 720p |
-| **Flux.1 Dev** | `flux` | Image | Image Studio |
-| **Qwen Image** / **Qwen Image 2.1 (7B, Turbo)** | `qwen_image_20B` / `qwen_image_21_7B` / `qwen_image_21_turbo_7B` | Image | Image Studio |
-| **Ideogram v4 NF4** | `ideogram4_nf4` | Image | Typography and layouts; needs `bitsandbytes` (the installer adds it) |
-| **Krea 2 Turbo** | `krea2_turbo` | Image | 8 steps, very aesthetic |
-| **Kroma v0.3.1 Turbo** | `krea2_turbo_kroma_v031` | Image | Krea 2 finetune by lodestones, ~26 GB; definition bundled in `electron/finetunes/` |
-| **Kroma Edit / Krea 2 Turbo Edit General v2** | `krea2_turbo_kroma_edit_v031` / `krea2_turbo_general_edit_v2` | Image edit | Change an uploaded picture with a prompt |
-| **HiDream O1 Dev** | `hidream_o1_dev_2604` | Image | 28 steps |
-| **Chroma Radiance** | `flux_chroma_radiance` | Image | Legacy: listed last on strong GPUs |
-| **InfiniteTalk** | `infinitetalk` | Lip sync | Portrait + audio, Lip Sync Studio |
-
-> **Why the remote option?** Wan2GP's runtime (Sage attention, flash-attn, AWQ/GGUF kernels) is CUDA/ROCm-only — there is no MPS / Apple Silicon path. The MCP server lets a Mac-only user keep the desktop app while offloading inference to a Linux/Windows GPU box, a gaming PC on the LAN, or a rented RunPod/vast.ai instance.
-
-> **Local inference is only available in the desktop app.** The hosted web version always uses cloud APIs.
-
-### Hardware Notes
-
-- **sd.cpp** runs on CPU (all platforms) and **Metal GPU** on Apple Silicon (M1/M2/M3/M4); CUDA/Vulkan/ROCm on Linux/Windows.
-- Metal GPU acceleration is built into the macOS desktop binary — significantly faster than CPU-only.
-- Recommended for sd.cpp Z-Image: 16 GB RAM (7.4 GB weights + 2.4 GB compute buffer). On a base 8 GB M-series Mac, **Z-Image is known to hang the system** — stick to SD 1.5 there.
-- For SD 1.5 on M2: expect ~1–2 s/step with the Metal dylib active. If you see ~10 s/step instead, the binary may have fallen back to CPU — see verification below.
-
-### Verifying the SD 1.5 path (the fastest sanity test on Mac)
-
-If you want to confirm sd.cpp is installed correctly without going through the UI, you can drive `sd-cli` directly. This is the same binary the app uses.
-
-```bash
-# 1. App data layout (created on first app launch)
-APP_DATA="${OPEN_GENERATIVE_AI_LOCAL_AI_DIR:-$HOME/Library/Application Support/open-generative-ai/local-ai}"
-ls "$APP_DATA/bin"     # sd-cli, libstable-diffusion.dylib
-ls "$APP_DATA/models"  # whatever you've downloaded
-
-# 2. Grab a small SD 1.5 model directly (Dreamshaper 8, ~2 GB)
-curl -L --fail --progress-bar \
-  -o "$APP_DATA/models/DreamShaper_8_pruned.safetensors" \
-  "https://huggingface.co/Lykon/DreamShaper/resolve/main/DreamShaper_8_pruned.safetensors"
-
-# 3. Run a single 512x512 / 12-step inference
-DYLD_LIBRARY_PATH="$APP_DATA/bin" "$APP_DATA/bin/sd-cli" \
-  -m "$APP_DATA/models/DreamShaper_8_pruned.safetensors" \
-  -p "a serene mountain lake at sunrise, oil painting" \
-  -o /tmp/sd15-test.png \
-  --steps 12 -H 512 -W 512 --cfg-scale 7.5 --seed 42 \
-  --sampling-method euler_a
-```
-
-A healthy run on Apple Silicon prints `total params memory size = 1969.78MB (VRAM 1969.78MB, RAM 0.00MB)` (Metal-backed) and produces a coherent 512×512 PNG. If `VRAM` is `0.00MB` instead, the dylib is CPU-only — check `otool -L "$APP_DATA/bin/libstable-diffusion.dylib" | grep -i metal` and reinstall the engine from **Settings → Local Models** if Metal is missing.
-
----
-
-## ✨ Features
-
-- **Image Studio** — Generate images from text prompts (50+ text-to-image models) or transform existing images (55+ image-to-image models). Switches model set automatically based on whether a reference image is provided. Quality and resolution controls visible for models that support them.
-- **Local Inference** — Two engines: **sd.cpp** (bundled, runs on Mac/Win/Linux with Metal/CUDA/Vulkan/ROCm) for SD 1.5, SDXL, and Z-Image; and **Wan2GP** (your own install — local folder or remote MCP server) for Flux, Qwen-Image, and video models in Video Studio (Wan 2.1/2.2, Hunyuan, LTX-2). Configure both in Settings → Local Models.
-- **Multi-Image Input** — Upload up to 14 reference images for compatible edit models (Nano Banana 2 Edit, Flux Kontext Dev, GPT-4o Edit, and more). Multi-select picker with order badges, batch upload, and a "Use Selected" confirmation flow.
-- **Video Studio** — Generate videos from text prompts (40+ text-to-video models) or animate a start-frame image (60+ image-to-video models). Same intelligent mode switching as Image Studio.
-- **Audio Studio** — Generate and edit AI audio/music from text prompts.
-- **AI Clipping** — Auto-clip and extract highlights from longer video content.
-- **Vibe Motion Studio** — Motion/animation generation studio for stylized video effects.
-- **Lip Sync Studio** — Animate portrait images or sync lips on existing videos using audio. 9 dedicated models across two modes: portrait image + audio → talking video, and video + audio → lipsync video.
-- **Body Swap (Recast) Studio** — Swap/recast a subject's body or appearance in an image or video.
-- **Cinema Studio** — Interface for photorealistic cinematic shots with pro camera controls (Lens, Focal Length, Aperture)
-- **Marketing Studio** — Generate ad and marketing-ready creative variations from a single input.
-- **Workflow Studio** — Build and run multi-step AI pipelines visually. Chain image, video, and audio models into automated flows. Browse community templates, create your own with a node-based editor, and run them via an interactive playground.
-- **Agent Studio** — Multi-turn creative agent that plans and executes generation tasks conversationally.
-- **Design Agent Studio** — Canvas-based autonomous design agent for iterative visual work.
-- **Explore Apps** — Directory of app templates and use-cases built on the same model catalog.
-- **AI Influencer Studio** — Tools for creating and managing consistent AI persona/influencer content.
-- **Upload History** — Reference images are uploaded once and stored locally. A picker panel lets you reuse any previously uploaded image across sessions — no re-uploading.
-- **Smart Controls** — Dynamic aspect ratio, resolution/quality, and duration pickers that adapt to each model's capabilities (including t2i models with resolution or quality options)
-- **Generation History** — Browse, revisit, and download all past generations (persisted in browser storage)
-- **Image & Video Download** — One-click download of generated outputs in full resolution
-- **API Key Management** — Secure API key storage in browser localStorage (never sent to any server except Muapi)
-- **Responsive Design** — Works seamlessly on desktop and mobile with dark glassmorphism UI
-
-### 🖼️ Image Studio — Dual Mode
-
-The Image Studio automatically switches between two model sets:
-
-| Mode | Trigger | Models | Prompt |
-| :--- | :--- | :--- | :--- |
-| **Text-to-Image** | Default (no image) | 50+ t2i models (Flux, Nano Banana 2, Seedream 5.0, Ideogram, GPT-4o, Midjourney…) | Required |
-| **Image-to-Image** | Reference image uploaded | 55+ i2i models (Kontext, Nano Banana 2 Edit, Seedream 5.0 Edit, Seededit, Upscaler…) | Optional |
-
-#### Newly Added Models
-
-| Model | Type | Key Features |
-| :--- | :--- | :--- |
-| **Nano Banana 2** | Text-to-Image | Google Gemini 3.1 Flash Image · Resolution 1K/2K/4K · Google Search enhancement · aspect ratio `auto` |
-| **Nano Banana 2 Edit** | Image-to-Image | Up to **14 reference images** · Resolution 1K/2K/4K · Google Search enhancement |
-| **Seedream 5.0** | Text-to-Image | ByteDance · Quality basic/high · 8 aspect ratios · up to 4K |
-| **Seedream 5.0 Edit** | Image-to-Image | ByteDance · Natural language style transfer · Quality basic/high |
-| **MiniMax Image 01** | Text-to-Image | MiniMax · 8 aspect ratios · up to 4 images per request · 1500 char prompt |
-
-#### Multi-Image Input
-
-Models that accept multiple reference images expose a multi-select picker when active:
-
-| Model | Max Images |
-| :--- | :--- |
-| Nano Banana 2 Edit | 14 |
-| Nano Banana Edit | 10 |
-| Flux Kontext Dev I2I | 10 |
-| Kling O1 Edit Image | 10 |
-| GPT-4o Edit / GPT Image 1.5 Edit | 10 |
-| Bytedance Seedream Edit v4 / v4.5 | 10 |
-| Vidu Q2 Reference to Image | 7 |
-| Flux 2 Flex/Pro Edit | 8 |
-| Nano Banana Pro Edit | 8 |
-| Flux Kontext Pro/Max I2I | 2 |
-| Wan 2.5/2.6 Image Edit | 2–3 |
-| Qwen Image Edit Plus / 2511 | 3 |
-| GPT-4o Image to Image | 5 |
-| Flux 2 Klein 4b/9b Edit | 4 |
-
-When a multi-image model is selected the upload trigger switches to multi-select mode:
-- **Checkboxes with order numbers** — images are sent to the model in the order you select them
-- **Batch upload** — pick multiple files at once from your file dialog
-- **Count badge** on the trigger shows how many images are active; a `+` badge appears when more slots are available
-- **"Use Selected" button** confirms and closes the picker
-
-### 🎬 Video Studio — Dual Mode
-
-The Video Studio follows the same pattern:
-
-| Mode | Trigger | Models | Prompt |
-| :--- | :--- | :--- | :--- |
-| **Text-to-Video** | Default (no image) | 40+ t2v models (Kling, Sora, Veo, Wan, Seedance 2.0, Hailuo, Runway…) | Required |
-| **Image-to-Video** | Start frame uploaded | 60+ i2v models (Kling I2V, Veo3 I2V, Runway I2V, Wan I2V, Seedance 2.0 I2V, Midjourney I2V…) | Optional |
-
-#### Newly Added Models
-
-| Model | Type | Key Features |
-| :--- | :--- | :--- |
-| **Seedance 2.0** | Text-to-Video | ByteDance · Aspect ratios 16:9 / 9:16 / 4:3 / 3:4 · Duration 5 / 10 / 15s · Quality basic/high |
-| **Seedance 2.0 I2V** | Image-to-Video | ByteDance · Animate images into video · Up to 9 reference images · Aspect ratios 16:9 / 9:16 / 4:3 / 3:4 · Duration 5 / 10 / 15s · Quality basic/high |
-| **Seedance 2.0 Extend** | Video Extension | ByteDance · Seamlessly continue any Seedance 2.0 generation · Preserves style, motion & audio · Optional continuation prompt · Duration 5 / 10 / 15s · Quality basic/high |
-| **Grok Imagine T2V** | Text-to-Video | xAI · Duration 6 / 10 / **15s** · Modes: fun / normal / spicy · Aspect ratios 9:16 / 16:9 / 2:3 / 3:2 / 1:1 |
-| **Grok Imagine I2V** | Image-to-Video | xAI · Duration 6 / 10 / **15s** · Modes: fun / normal / spicy · Cinematic motion from still images |
-| **MiniMax Hailuo 02 / 2.3 Standard & Pro** | Text-to-Video / Image-to-Video | MiniMax · Full HD video · Multiple aspect ratios · Fast variant included |
-
-### 🎙️ Lip Sync Studio
-
-The **Lip Sync Studio** generates audio-driven talking videos using 9 models across two input modes:
-
-| Mode | Trigger | Description |
-| :--- | :--- | :--- |
-| **Portrait Image** | Default | Upload a portrait image + audio file → animated talking video |
-| **Video** | Switch to Video mode | Upload an existing video + audio file → lipsync video |
-
-#### Image-based Models (Portrait Image + Audio → Video)
-
-| Model | Endpoint | Resolutions | Prompt |
-| :--- | :--- | :--- | :--- |
-| **Infinite Talk** | `infinitetalk-image-to-video` | 480p, 720p | Optional |
-| **Wan 2.2 Speech to Video** | `wan2.2-speech-to-video` | 480p, 720p | Optional |
-| **LTX 2.3 Lipsync** | `ltx-2.3-lipsync` | 480p, 720p, 1080p | Optional |
-| **LTX 2 19B Lipsync** | `ltx-2-19b-lipsync` | 480p, 720p, 1080p | Optional |
-
-#### Video-based Models (Video + Audio → Lipsync Video)
-
-| Model | Endpoint | Resolutions | Prompt |
-| :--- | :--- | :--- | :--- |
-| **Sync Lipsync** | `sync-lipsync` | — | — |
-| **LatentSync** | `latentsync-video` | — | — |
-| **Creatify Lipsync** | `creatify-lipsync` | — | — |
-| **Veed Lipsync** | `veed-lipsync` | — | — |
-| **Infinite Talk V2V** | `infinitetalk-video-to-video` | 480p, 720p | Optional |
-
-**How it works:**
-1. Select **Portrait Image** or **Video** mode using the toggle
-2. Upload your portrait image (or video) using the image/video upload button
-3. Upload your audio file using the audio upload button
-4. Optionally enter a prompt to guide the motion style
-5. Select a model and resolution (where supported), then click **Generate**
-
-Generation history is saved separately in `lipsync_history` and pending jobs resume automatically on page reload.
-
-### 🔀 Workflow Studio
-
-The **Workflow Studio** lets you build and run multi-step AI pipelines without writing code.
-
-**Key capabilities:**
-- **Templates** — Start from pre-built workflows (image chains, video pipelines, and more)
-- **My Workflows** — Save and manage your own custom pipelines
-- **Community** — Browse and run workflows published by other users
-- **Node-based Builder** — Drag-and-drop visual editor to connect models and route outputs between steps
-- **Playground** — Run any workflow interactively with a form UI; results render inline
-- **API execution** — Every workflow is also callable via the Muapi API
-
-> 💡 **Want to add workflows to your own app?** Check out **[Vibe Workflow](https://github.com/SamurAIGPT/Vibe-Workflow)** — the open-source workflow engine powering this feature. Drop it into any project.
-
-### 🎥 Cinema Studio Controls
-
-The **Cinema Studio** offers precise control over the virtual camera, translating your choices into optimized prompt modifiers:
-
-| Category | Available Options |
-| :--- | :--- |
-| **Cameras** | Modular 8K Digital, Full-Frame Cine Digital, Grand Format 70mm Film, Studio Digital S35, Classic 16mm Film, Premium Large Format Digital |
-| **Lenses** | Creative Tilt, Compact Anamorphic, Extreme Macro, 70s Cinema Prime, Classic Anamorphic, Premium Modern Prime, Warm Cinema Prime, Swirl Bokeh Portrait, Vintage Prime, Halation Diffusion, Clinical Sharp Prime |
-| **Focal Lengths** | 8mm (Ultra-Wide), 14mm, 24mm, 35mm (Human Eye), 50mm (Portrait), 85mm (Tight Portrait) |
-| **Apertures** | f/1.4 (Shallow DoF), f/4 (Balanced), f/11 (Deep Focus) |
-
-### 📁 Upload History & Picker
-
-Every image you upload is saved locally (URL + thumbnail) so you never upload the same file twice:
-
-- Click the upload button to open the **reference image picker**
-- Previously uploaded images appear in a 3-column grid with thumbnails
-- **Single-image models** — click a thumbnail to instantly select and close
-- **Multi-image models** — toggle multiple thumbnails (shown with order numbers), then click **Use Selected**
-- Upload new images with the **Upload files** button (supports multi-file selection in multi-image mode)
-- Remove individual images from history with the ✕ button
-- History persists across browser sessions (stored in `localStorage`)
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18+)
-- A [Muapi.ai access key](https://muapi.ai/access-keys?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai). Copy the generated key value into the app; do not enter the key name or label.
-
-### Windows quick setup (this fork)
-
-Needs [Git](https://git-scm.com/) and [Node.js 18+](https://nodejs.org/). In PowerShell:
-
-```powershell
-git clone --recurse-submodules <this repo URL>
-cd open-generative-ai
-powershell -ExecutionPolicy Bypass -File setup.ps1            # app only
-powershell -ExecutionPolicy Bypass -File setup.ps1 -Wan2GP    # + local video models (NVIDIA GPU, Python 3.11)
-```
-
-Optional: `-ModelsDir D:\AI\local-ai` stores engine and models on another drive (it can also be changed later from Settings > Local Models > Change folder). Then start the app with `start.bat`.
-
-### Setup
-
-> **Most users want the desktop app, not this dev path.** If you just want to run Open Generative AI on your machine, [download a prebuilt installer](#-download-desktop-app) instead — no Node.js required. The instructions below are for contributors building from source.
-
-Pick the entry point that matches your goal:
-
-- **Desktop app (Electron)** → `npm run electron:dev`
-- **Hosted web version (Next.js)** → `npm run dev`
-
-```bash
-# Clone the repository (with submodules — required for the workflow + agent packages)
-git clone --recurse-submodules https://github.com/Anil-matcha/Open-Generative-AI.git
-cd Open-Generative-AI
-
-# If you already cloned without --recurse-submodules, run this once:
-# git submodule update --init --recursive
-
-# Install dependencies + build workspace packages (studio, workflow, agents).
-# This step is REQUIRED — `npm install` alone is not enough; the workspaces
-# need to be built before either dev script will work.
-npm run setup
-
-# Then start ONE of:
-npm run electron:dev   # Desktop app (Electron + Vite) — recommended
-npm run dev            # Hosted web version (Next.js) → http://localhost:3000
-```
-
-You'll be prompted to enter your Muapi API key on first use (skip the key if you only plan to use local models).
-
-> **Troubleshooting — `Couldn't find a 'pages' directory`**: this means Next.js can't see the `app/` folder. Confirm you're running `npm run dev` from the repo root (the directory that contains `app/`, `package.json`, and `next.config.mjs`), and that you cloned with submodules. Re-run `npm run setup` if `packages/Vibe-Workflow` or `packages/agents` are empty.
-
-### Production Build
-
-```bash
-npm run build
-npm run start
-```
-
-### Desktop App Build
-
-Build native desktop apps with Electron:
-
-```bash
-# macOS (DMG — Intel + Apple Silicon)
-npm run electron:build
-
-# Windows (NSIS installer — x64 + ARM64)
-npm run electron:build:win
-
-# Linux (AppImage + DEB — x64)
-npm run electron:build:linux
-
-# Both platforms in one pass
-npm run electron:build:all
-```
-
-Installers are output to the `release/` folder. Pre-built binaries are also available on the [Releases page](https://github.com/Anil-matcha/Open-Generative-AI/releases).
-
-## 🏗️ Architecture
-
-The app is a **Next.js monorepo** with a shared `packages/studio` component library.
-
-```
-Open-Generative-AI/
-├── app/                        # Next.js App Router
-│   ├── layout.js               # Root layout (Tailwind, fonts)
-│   ├── page.js                 # Redirects → /studio
-│   └── studio/
-│       └── page.js             # Studio page — renders StandaloneShell
-├── components/
-│   ├── StandaloneShell.js      # Tab nav + BYOK (API key from localStorage)
-│   └── ApiKeyModal.js          # API key entry modal
-├── packages/
-│   └── studio/                 # Shared React component library
-│       └── src/
-│           ├── index.js        # Exports: ImageStudio, VideoStudio, AudioStudio, ClippingStudio, VibeMotionStudio, LipSyncStudio, RecastStudio, CinemaStudio, MarketingStudio, WorkflowStudio, AgentStudio, DesignAgentStudio, AppsStudio, AiInfluencerStudio, McpCliStudio
-│           ├── models.js       # 400+ model definitions (single source of truth)
-│           ├── muapi.js        # API client (named exports, apiKey as first param)
-│           └── components/
-│               ├── ImageStudio.jsx    # Dual-mode t2i/i2i studio
-│               ├── VideoStudio.jsx    # Dual-mode t2v/i2v studio
-│               ├── LipSyncStudio.jsx  # Portrait/video + audio → talking video
-│               ├── CinemaStudio.jsx   # Pro studio with camera controls
-│               └── WorkflowStudio.jsx # Multi-step pipeline builder & playground
-├── next.config.mjs             # transpilePackages: ['studio']
-├── tailwind.config.js
-└── package.json                # workspaces: ["packages/studio"]
-```
-
-The `packages/studio` library is also consumed by the hosted version on [muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai) — model updates made in `packages/studio/src/models.js` apply to both the self-hosted app and the hosted version automatically.
-
-## 🔌 API Integration
-
-The app communicates with [Muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai) using a two-step pattern:
-
-1. **Submit** — `POST /api/v1/{model-endpoint}` with prompt and parameters
-2. **Poll** — `GET /api/v1/predictions/{request_id}/result` until status is `completed`
-
-Authentication uses the `x-api-key` header. During development, a Vite proxy handles CORS by routing `/api` requests to `https://api.muapi.ai`.
-
-File uploads use `POST /api/v1/upload_file` (multipart/form-data) and return a hosted URL that is passed to image-conditioned models. For multi-image models the full `images_list` array is forwarded to the API in one request.
-
-Lip sync jobs use the same two-step pattern: a dedicated `processLipSync()` method accepts `image_url` or `video_url` alongside `audio_url`, dispatches to the model's endpoint, and polls until the output video URL is available.
-
-## 🎨 Supported Model Categories
-
-| Category | Count | Examples |
-|---|---|---|
-| **Text-to-Image** | 70+ | Flux Dev, Nano Banana 2, Seedream 5.0, Ideogram v3, Midjourney v7, GPT-4o, SDXL |
-| **Image-to-Image** | 70+ | Nano Banana 2 Edit (×14), Flux Kontext Pro, GPT-4o Edit, Seededit v3, Upscaler, Background Remover |
-| **Text-to-Video** | 85+ | Kling v3, Sora 2, Veo 3, Wan 2.6, Seedance 2.0, Seedance 2.0 Extend, Seedance Pro, Hailuo 2.3, Runway Gen-3 |
-| **Image-to-Video** | 120+ | Kling v2.1 I2V, Veo3 I2V, Runway I2V, Seedance 2.0 I2V, Midjourney v7 I2V, Hunyuan I2V, Wan2.2 I2V |
-| **Video-to-Video** | 35+ | Video effects, AI Clipping, Vibe Motion, video-conditioned edits |
-| **Lip Sync** | 15 | Infinite Talk I2V, Wan 2.2 Speech to Video, LTX 2.3 Lipsync, LTX 2 19B Lipsync, Sync, LatentSync, Creatify, Veed, Infinite Talk V2V |
-| **Body Swap / Recast** | 3 | Subject/appearance recast across image and video |
-| **Audio** | 15+ | Text-to-music, remix, and audio editing models |
-
-(Counts verified against `packages/studio/src/models.js` — total 420+ models across these 8 categories, plus additional models surfaced through Marketing, Agent, and Design Agent studios.)
-
-## 🛠️ Tech Stack
-
-- **Next.js 14** — App Router, server components, fast dev server
-- **React 18** — Studio UI components
-- **Tailwind CSS v3** — Utility-first styling
-- **npm workspaces** — Monorepo with shared `packages/studio` library
-- **Muapi.ai** — AI model API gateway
-
-## 🤔 How is this different from other AI Video Platforms?
-
-**Open Generative AI** is a community-driven, open-source alternative that provides similar creative capabilities without the closed ecosystem:
-
-| | Other providers | Open Generative AI |
-| :--- | :--- | :--- |
-| **Cost** | Subscription-based | Free (open-source) |
-| **Content filters** | Yes — prompts blocked or altered | None |
-| **Restrictions** | Platform guardrails enforced | Full creative freedom |
-| **Models** | Proprietary | 400+ open & commercial models |
-| **Multi-image input** | Limited | Up to 14 images per request |
-| **Lip sync** | No | 9 models, image & video modes |
-| **Hosted version** | Subscription | Free at [muapi.ai/open-generative-ai](https://muapi.ai/open-generative-ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai) |
-| **Self-hosting** | No | Yes |
-| **Customizable** | No | Fully hackable |
-| **Data privacy** | Cloud-based | Your data stays local |
-| **Source code** | Closed | MIT licensed |
-
-## 📄 License
-
-MIT
-
-## 🙏 Credits
-
-Built with [Muapi.ai](https://muapi.ai?utm_source=github&utm_medium=readme&utm_campaign=open-generative-ai) — the unified API for AI image and video generation models.
-
----
-**Deep Dive**: For more details on the "AI Influencer" engine, upcoming "Popcorn" storyboarding features, and the future of this project, read the [full technical overview](https://medium.com/@anilmatcha/).
-
----
-*Looking for a free, open-source AI Video Platform? Open Generative AI is an open-source AI image and video generation studio — with no content filters that you can self-host, customize, and extend.*

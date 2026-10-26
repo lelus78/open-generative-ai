@@ -38,8 +38,8 @@ export function Header(navigate) {
         ...(window.localAI?.movie ? [{ label: t('nav.movie'), page: 'movie' }] : []),
         ...(window.localAI?.wan2gp ? [{ label: t('nav.music'), page: 'music' }] : []),
         { label: t('nav.cinema'),  page: 'cinema' },
-        { label: t('nav.workflows'), page: 'workflows' },
-        { label: t('nav.agents'),  page: 'agents' },
+        // Workflows and Agents only exist in the web app; in the desktop app they would be empty pages.
+        ...(window.localAI ? [] : [{ label: t('nav.workflows'), page: 'workflows' }, { label: t('nav.agents'), page: 'agents' }]),
         { label: t('nav.mcpcli'),  page: 'mcp-cli' },
     ];
 

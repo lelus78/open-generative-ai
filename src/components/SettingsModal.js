@@ -21,12 +21,13 @@ export function SettingsModal(onClose) {
     modal.appendChild(header);
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
-    const TABS = [
-        { id: 'api', label: t('settings.apiKey') },
-        ...(isLocalAIAvailable() ? [{ id: 'local', label: t('settings.localModels') }] : []),
-    ];
+    // The desktop app is local-first: Local Models comes first and opens by default, the cloud API key is an optional extra.
+    const localFirst = isLocalAIAvailable();
+    const TABS = localFirst
+        ? [{ id: 'local', label: t('settings.localModels') }, { id: 'api', label: `${t('settings.apiKey')} (optional)` }]
+        : [{ id: 'api', label: t('settings.apiKey') }];
 
-    let activeTab = 'api';
+    let activeTab = localFirst ? 'local' : 'api';
 
     const tabBar = document.createElement('div');
     tabBar.style.cssText = 'display:flex;gap:0.25rem;padding:0.75rem 1.5rem 0;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0;';
@@ -91,7 +92,7 @@ export function SettingsModal(onClose) {
         if (id === 'local') body.appendChild(localPanel);
     };
 
-    switchTab('api');
+    switchTab(activeTab);
 
     // ── API key save/cancel handlers ──────────────────────────────────────────
     const close = () => {
