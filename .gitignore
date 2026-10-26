@@ -39,3 +39,7 @@ out/
 
 # Movies made by the app for review
 output/
+
+# Local downloads (test images, workflows)
+*.zip
+drive-download-*/
