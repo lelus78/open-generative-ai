@@ -24,7 +24,7 @@ export function SettingsModal(onClose) {
     // The desktop app is local-first: Local Models comes first and opens by default, the cloud API key is an optional extra.
     const localFirst = isLocalAIAvailable();
     const TABS = localFirst
-        ? [{ id: 'local', label: t('settings.localModels') }, { id: 'api', label: `${t('settings.apiKey')} (optional)` }]
+        ? [{ id: 'local', label: t('settings.localModels') }, { id: 'api', label: `${t('settings.apiKey')} (optional)` }, { id: 'about', label: 'About' }]
         : [{ id: 'api', label: t('settings.apiKey') }];
 
     let activeTab = localFirst ? 'local' : 'api';
@@ -72,6 +72,33 @@ export function SettingsModal(onClose) {
     // ── Tab: Local Models ─────────────────────────────────────────────────────
     const localPanel = LocalModelManager();
 
+    // ── Tab: About ────────────────────────────────────────────────────────────
+    const aboutPanel = document.createElement('div');
+    aboutPanel.style.cssText = 'display:flex;flex-direction:column;gap:0.9rem;font-size:0.8rem;color:rgba(255,255,255,0.7);';
+    aboutPanel.innerHTML = `
+        <div><div style="font-size:1.05rem;font-weight:800;color:#fff;">Open Generative AI — Local Edition</div>
+        <div id="about-version" style="margin-top:0.2rem;color:rgba(255,255,255,0.5);">Version …</div></div>
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <button id="about-check" style="padding:0.45rem 0.9rem;border-radius:0.5rem;background:var(--color-primary,#22d3ee);color:#000;font-size:0.75rem;font-weight:700;border:none;cursor:pointer;">Check for updates</button>
+            <span id="about-update" style="font-size:0.75rem;color:rgba(255,255,255,0.5);"></span>
+        </div>
+        <div style="line-height:1.6;">
+            <a href="https://github.com/lelus78/open-generative-ai" target="_blank" style="color:var(--color-primary,#22d3ee);">github.com/lelus78/open-generative-ai</a> — source, releases, issues<br>
+            <a href="https://github.com/lelus78/open-generative-ai/releases" target="_blank" style="color:var(--color-primary,#22d3ee);">Releases</a> ·
+            <a href="https://github.com/lelus78/open-generative-ai/issues" target="_blank" style="color:var(--color-primary,#22d3ee);">Report a problem</a>
+        </div>
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">MIT licence. A fork of Anil-matcha/Open-Generative-AI. For a bug report use the bug icon in the top bar (Debug log → Copy all) and paste it in the issue.</div>
+    `;
+    const aboutVersion = aboutPanel.querySelector('#about-version');
+    const aboutUpdate = aboutPanel.querySelector('#about-update');
+    const aboutApi = window.localAI;
+    aboutApi?.about?.().then((a) => { aboutVersion.textContent = `Version ${a.version} · ${a.platform} · Electron ${a.electron}`; }).catch(() => {});
+    aboutPanel.querySelector('#about-check').onclick = async () => {
+        aboutUpdate.textContent = 'Checking…';
+        const r = await aboutApi?.checkUpdate?.().catch((e) => ({ state: 'error', message: e.message }));
+        aboutUpdate.textContent = !r ? '' : r.state === 'latest' ? 'You have the latest version.' : r.state === 'available' ? `Version ${r.version} is available.` : r.state === 'dev' ? 'Updates are checked in the installed app only.' : `Could not check: ${r.message}`;
+    };
+
     // ── Tab switching ─────────────────────────────────────────────────────────
     const switchTab = (id) => {
         activeTab = id;
@@ -90,6 +117,7 @@ export function SettingsModal(onClose) {
 
         if (id === 'api') body.appendChild(apiPanel);
         if (id === 'local') body.appendChild(localPanel);
+        if (id === 'about') body.appendChild(aboutPanel);
     };
 
     switchTab(activeTab);

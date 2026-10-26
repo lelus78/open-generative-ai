@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('localAI', {
     },
 
     // ── Debug log: what was asked, what each local tool did, why something failed ──
+    about: () => ipcRenderer.invoke('app:about'),
+    checkUpdate: () => ipcRenderer.invoke('app:check-update'),
     debug: {
         get: () => ipcRenderer.invoke('debug:get'),
         text: () => ipcRenderer.invoke('debug:text'),

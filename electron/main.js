@@ -9,7 +9,7 @@ const { register: registerDebug } = require('./lib/debugIpc');
 const { shared: debugLog } = require('./lib/debugLog');
 const { setupContextMenu } = require('./lib/contextMenu');
 const { register: registerMcpControl } = require('./lib/mcpControl');
-const { checkForUpdates } = require('./lib/updater');
+const { checkForUpdates, register: registerUpdater } = require('./lib/updater');
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
@@ -99,6 +99,7 @@ app.whenReady().then(() => {
         registerMovie();
         registerOutputFolders();
         registerMcpControl();
+        registerUpdater();
     } catch (err) {
         console.error('Failed to register local-ai/wan2gp handlers:', err);
         dialog.showErrorBox(
