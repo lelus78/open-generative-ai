@@ -3,7 +3,7 @@
   "description": "Local-first AI studio for images, video, lip sync, music and movies. Runs on your own PC and can be driven by an AI assistant through MCP.",
   "homepage": "https://github.com/lelus78/open-generative-ai",
   "private": true,
-  "version": "2.1.1",
+  "version": "2.1.2",
   "license": "MIT",
   "workspaces": [
     "packages/studio",
