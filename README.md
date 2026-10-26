@@ -1,6 +1,6 @@
 # Open Generative AI — Local Edition
 
-**A desktop AI studio that runs on your own PC.** Generate and edit images, make video, lip-sync a portrait and direct "cinema" shots with no API key, no subscription and nothing leaving your machine — on top of the same studios that already worked with cloud models.
+**A desktop AI studio that runs on your own PC.** Generate and edit images, make video, lip-sync a portrait, direct "cinema" shots and **put a whole movie together (pictures, clips, titles, music and sound effects)** with no API key, no subscription and nothing leaving your machine — on top of the same studios that already worked with cloud models.
 
 > This is a fork of [Anil-matcha/Open-Generative-AI](https://github.com/Anil-matcha/Open-Generative-AI) (MIT). The original is a studio for cloud models with a thin layer of local support. **This fork turns the local side into the main feature**: it adds new engines and models, picks what your hardware can run, keeps your history, translates prompts, edits images and more. Everything the original does is still here (the original documentation is kept [at the end](#original-project-documentation)).
 
@@ -21,6 +21,9 @@
 | **Speed** | A new Wan2GP process per generation: the model is read, quantized and loaded again every time. | One **persistent Wan2GP server**: the first image loads the model, the next ones start immediately (in my test the first edit took about 8 minutes, the next one 37 seconds). |
 | **History** | Lost on restart for local images; plain list. | **Survives restarts**, thumbnails, search, day groups, recover prompt, delete one or all (and the file on disk). |
 | **Usability** | — | Right-click menus, click-to-zoom, copy / paste / drag & drop pictures, ArrowUp for the last 10 prompts, a real progress phase (*downloading weights, translating, step n/N*), a folder picker for where the models go, Local/API choice remembered. |
+| **Making a whole movie** | Not available. | A **Movie studio**: an AI director writes the shots, your own pictures keep the objects and people looking right, and the app adds titles, transitions, music, sound effects and a final upscale. [See below](#make-a-whole-movie-from-your-own-pictures). |
+| **Music and sound effects** | Not available locally. | A **Music tab** that makes soundtracks and sound effects from a description, on your PC. |
+| **Where are my files?** | — | A **Folders** button in the top bar opens the folders where pictures, clips and movies are saved. |
 | **MCP & CLI tab** | Commands written for Claude, pointing at a cloud service. | Copy-paste setups for **Claude, Cursor, Windsurf, Gemini CLI, Cline, any MCP client** and a **DeepSeek** guide. |
 | **AI assistants controlling the app** | Not available. | A **local MCP server inside the app** (like the Blender MCP): Claude Code, Cursor or any MCP client can generate and edit images with your local models while the app is open, and the results appear in Image Studio. |
 
@@ -63,12 +66,41 @@ claude mcp add --transport http open-generative-ai http://127.0.0.1:47821/mcp \
 
 Then ask your assistant things like *"generate a fox in the snow at sunset"* or *"make the dog in /path/dog.png black"*. It works with the app open, and what it makes shows up in Image Studio (and its history) while it works. Tools: `list_models`, `generate_image`, `edit_image`, `enhance_prompt`, `recent_results`, `cancel_generation`. Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. This is different from the cloud MCP server in the *MCP & CLI* tab, which runs on someone else's servers.
 
+### Make a whole movie from your own pictures
+The **Movie** tab turns an idea (or a few photos) into a finished video, all on your PC. You can use it in two ways: describe the movie and let the AI director do everything, or arrange pictures and clips yourself and finish them with titles, transitions and music.
+
+**1. Describe it, add the pictures that must look right.** The local writer (Qwen) turns the idea into shots. Pictures you add as *references* (an object, a place, a person) are what the video model (MiniMax H3) keeps faithful, so a real prop stays the real prop. Shots can be vertical (Reels, Shorts, TikTok), square or wide.
+
+<p align="center"><img src="docs/images/movie-director.jpg" alt="Movie tab: the AI director, with the idea, the quality of each shot and the reference pictures" width="900"></p>
+<p align="center"><sub>The AI director: the idea, how long and how sharp each shot is, and the reference pictures (faces blurred here). <b>✂ Edit</b> opens the picture editor below.</sub></p>
+
+**2. Each shot can be redone on its own.** Every shot shows the reference pictures it is made from: you can add, remove or edit them for that shot only (a face for the shots where it is seen, the whole object for the shot where only the object appears). The last three versions of a shot are kept, click one to use it. Titles and captions are chosen in the same place.
+
+<p align="center"><img src="docs/images/movie-text-styles.jpg" alt="A shot with its reference pictures, its description and the caption style menu, every style written in its own typeface" width="900"></p>
+<p align="center"><sub>One shot: its references, its description, <b>Redo this shot</b>, and the caption menu. Each style is shown in its own typeface and colour (28 title styles and 24 caption styles, grouped; the menu lists the ones whose font is on your PC).</sub></p>
+
+**3. Edit a picture without leaving the app.** Crop (free or to a fixed shape), rotate, flip, brightness, contrast and colour, for example to cut a face out of a bigger photo and use it as a reference. The original is never changed: the app uses a saved copy.
+
+<p align="center"><img src="docs/images/movie-picture-editor.jpg" alt="The picture editor: crop frame, rotate, flip and colour sliders" width="760"></p>
+
+**4. Music and sound effects, made on your PC.** The **Music** tab makes a soundtrack or a sound effect from a description (Stable Audio 3 through Wan2GP) and can send it to the movie. The director can also compose the music and the effects of a movie by itself.
+
+<p align="center"><img src="docs/images/music-tab.jpg" alt="The Music tab with its examples and a finished sound" width="860"></p>
+
+**5. Put it together and make it bigger.** 32 transitions, titles and captions, optional title cards (also as a transparent video you can use in another editor), the sound of the clips and the music mixed, then a **final upscale** to Full HD, 2K or 4K (a fast one that keeps faces natural, or an AI one in ComfyUI).
+
+<p align="center"><img src="docs/images/movie-reel-result.jpg" alt="Five frames of a finished vertical reel: a white 3D print, being painted, held in a hand, in silhouette, ready" width="900"></p>
+<p align="center"><sub>A real result: a vertical Reel made from three photos of a hand-painted prop. The shots and the music were made by the app; titles and captions come from its styles (the person in the third frame is cropped and blurred).</sub></p>
+
+What it needs: **ffmpeg** (the one that comes with Wan2GP is found automatically) for everything; **Wan2GP** for the music and sound effects; and, for shots made from reference pictures, **MiniMax H3 in your own ComfyUI folder** (the app asks for the folder and tells you which files are missing). Tips that came out of real use: show the **whole object** in a reference when the shot must show it all; for a shot with a person, give one clear face picture and name that person in the shot description; strong side light makes any face look older, so prefer soft light or a backlit silhouette.
+
 ## What else changed
 
 - **Image Studio:** style presets now really change the prompt; any aspect ratio is supported locally (it was five fixed presets); the Prompt Enhancer builds on the prompt you already typed instead of replacing it; the optional **✨ Enhance with AI** expands it with the local Qwen model.
 - **Video Studio:** Wan 2.1 / 2.2, FusioniX, Hunyuan 1.5 (480p, 720p, image-to-video) and LTX-2 via Wan2GP, each described in the list with what it is good for.
 - **Lip Sync Studio:** portrait + audio → talking video with InfiniteTalk, locally.
 - **Cinema Studio:** local mode with any ready image model; camera and lens settings are turned into a *visual look* instead of drawing a photographer holding a camera.
+- **Movie, Music, Anime (H3):** a movie studio with an AI director, a music and sound-effects tab, a studio for MiniMax H3 anime clips, a **Folders** button for every result folder and a **Debug** panel that shows what each tool did and why something failed.
 - **Downloads:** guard against two downloads of the same file (which produced white images from a corrupted model), size check after every download, and a clear progress label (downloading, translating, loading, step n/N).
 - **Files:** every result can be deleted from the history (the file goes too); Settings shows the disk used and has *Delete all*. The model/output folder can be changed from the app.
 - **Windows setup:** `setup.ps1` and `start.bat` install and start everything; `scripts/install-wan2gp.ps1` installs Wan2GP from a terminal.
