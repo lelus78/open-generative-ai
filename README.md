@@ -38,7 +38,7 @@ Then open **Settings → Local Models**: install the sd.cpp engine (one click), 
 |---|---|
 | **Image** | Text to image and **edit a picture with a prompt**; style presets, any aspect ratio, prompt enhancer, history. |
 | **Video** | Wan 2.1 / 2.2, FusioniX, Hunyuan 1.5 and LTX-2 through Wan2GP: text to video and image to video. |
-| **Lip Sync** | A portrait and an audio file become a talking video (InfiniteTalk). |
+| **Lip Sync** | A portrait and an audio file become a talking video (InfiniteTalk). Heavy: about 22 GB to download and best from 20 GB of VRAM, so it is optional (the app tells you if your PC can run it). |
 | **Anime (H3)** | MiniMax H3 reference-to-video through your own ComfyUI: up to 4 reference pictures, a scene description, live preview. |
 | **Movie** | The AI director, per-shot references, picture editor, titles, transitions, music, final upscale. |
 | **Music** | Music and sound effects from a description, with Stable Audio 3. |
@@ -65,7 +65,9 @@ Then ask your assistant things like *"generate a fox in the snow at sunset"*, *"
 | **Long jobs** | videos, shots and movies run as jobs: the tool waits a little and answers with a job id; `job_status` waits for it, `list_jobs` and `cancel_job` manage them. One engine runs at a time. |
 | **The app itself** | `list_models` (what is ready, with the fit of your PC), `recent_results`, `show_folder`, `debug_log` (what each tool did and why a job failed), `cancel_generation` |
 
-Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself. The *MCP & CLI* tab shows the local server (URL, tools, a masked token) and ready setups for each client.
+Only models that are already downloaded are used, so an assistant never starts a multi-GB download by itself.
+
+**What to expect.** A heavy model is loaded into the GPU the first time it is used and again after the app has been idle (ComfyUI is stopped after 15 minutes unused), so the first video or shot after a pause can take several minutes, and a later one under a minute. While a big model loads or runs, the PC and the app can feel slow, as with any GPU job; the app stays usable, `cancel_job` stops a job, and only one engine runs at a time. Lip sync needs the 22 GB InfiniteTalk model: without it `make_lipsync` answers that no lip-sync model is ready and downloads nothing. The *MCP & CLI* tab shows the local server (URL, tools, a masked token) and ready setups for each client.
 
 ## Connect any AI client (MCP & CLI)
 
