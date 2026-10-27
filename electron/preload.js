@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('localAI', {
     getHardware: () => ipcRenderer.invoke('local-ai:hardware'),
     translate: (text) => ipcRenderer.invoke('local-ai:translate', text),
     enhancePrompt: (text) => ipcRenderer.invoke('local-ai:enhance-prompt', text),
+    previewPrompt: (text, kind) => ipcRenderer.invoke('local-ai:preview-prompt', text, kind),
     promptVariants: (text, count) => ipcRenderer.invoke('local-ai:prompt-variants', text, count),
     suggestStories: (request) => ipcRenderer.invoke('local-ai:suggest-stories', request),
     storyboard: (request) => ipcRenderer.invoke('local-ai:storyboard', request),

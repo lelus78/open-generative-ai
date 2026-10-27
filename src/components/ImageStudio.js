@@ -14,7 +14,7 @@ import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../li
 import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { SHEETS, applySheet, pickSheetAspect, nextSheet } from '../lib/contactSheet.js';
-import { attachPromptHistory, createPromptSwitches, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, reviewEnhancedPrompt, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { takeEntryToShow } from '../lib/externalResults.js';
 import { MAX_REPEATS, planVariants } from '../lib/promptVariants.js';
 import { createHistoryPanel } from './HistoryPanel.js';
@@ -441,7 +441,6 @@ export function ImageStudio() {
                             <label class="text-[10px] font-bold text-muted uppercase tracking-wider">${t('image.enhancedPrompt')}</label>
                             <div id="enhanced-prompt-display" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-xs min-h-[40px]"></div>
                             <div class="flex gap-2">
-                                ${isLocalAIAvailable() ? `<button id="ai-enhance-btn" title="${t('image.enhanceAiHelp')}" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 text-primary border border-primary/30 hover:bg-primary/10 transition-all">${t('image.enhanceAi')}</button>` : ''}
                                 <button id="copy-enhanced-btn" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 text-secondary hover:bg-white/10 transition-all">
                                     ${t('common.copy')}
                                 </button>
@@ -691,28 +690,6 @@ export function ImageStudio() {
         };
     });
     
-    // AI enhance: rewrite the prompt (base box, else the main prompt) with the local Qwen model.
-    const aiEnhanceBtn = toolsPanel.querySelector('#ai-enhance-btn');
-    if (aiEnhanceBtn) {
-        aiEnhanceBtn.onclick = async () => {
-            const idea = basePromptInput?.value?.trim() || textarea.value.trim();
-            if (!idea) { enhancedPromptDisplay.textContent = t('image.basePromptPlaceholder'); return; }
-            aiEnhanceBtn.disabled = true;
-            aiEnhanceBtn.textContent = t('image.enhanceAiBusy');
-            try {
-                const text = await window.localAI.enhancePrompt(idea);
-                // The result replaces the tag mix: it is the new base, with the chosen tags added on top.
-                if (basePromptInput) basePromptInput.value = text;
-                updateEnhancedPrompt();
-            } catch (err) {
-                enhancedPromptDisplay.textContent = String(err?.message || err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-            } finally {
-                aiEnhanceBtn.disabled = false;
-                aiEnhanceBtn.textContent = t('image.enhanceAi');
-            }
-        };
-    }
-
     // Copy enhanced button
     const copyEnhancedBtn = toolsPanel.querySelector('#copy-enhanced-btn');
     if (copyEnhancedBtn) {
@@ -1397,6 +1374,7 @@ export function ImageStudio() {
             const res = await localAI.generate({
                 model: job.modelId,
                 prompt: job.sent,
+                prompt_ready: job.prompt_ready,
                 negative_prompt: job.negative_prompt,
                 ...(job.image ? { image: job.image } : {}),
                 aspect_ratio: job.aspect_ratio,
@@ -1517,12 +1495,22 @@ export function ImageStudio() {
                 })));
                 window.localAI.debug?.log('sheet', 'info', `${sheet} sheet: subject sent to the model`, { typed: prompts, subject: subjects, translated: subjects.some((s, i) => s !== prompts[i]) });
             }
+            // ✨ Enhance: one plain prompt (no variants, no sheet) is shown rewritten before it is generated.
+            let ready = false;
+            if (!imageMode && sheet === 'off' && prompts.every((p) => p === prompt)) {
+                const review = await reviewEnhancedPrompt({ text: prompt, kind: 'image', after: promptSwitches || topRow });
+                if (!review) return;
+                ready = review.ready;
+                prompts = prompts.map(() => review.prompt);
+                subjects = prompts;
+            }
             const aspect_ratio = imageMode ? await aspectOfImage(uploadedImageUrls[0], lm.aspectRatios) : selectedAr;
             prompts.forEach((p, i) => {
                 localQueue.push({
                     modelId: localModelId,
-                    prompt: p,
+                    prompt: ready ? prompt : p,   // the history keeps what was typed; the rewrite is its translatedPrompt
                     sent: imageMode ? p : applyStyle(applySheet(sheet, subjects[i])),
+                    prompt_ready: ready || undefined,
                     sheet: sheet !== 'off' ? sheet : undefined,
                     subject: sheet !== 'off' ? subjects[i] : undefined,
                     negative_prompt: negativePrompt || undefined,

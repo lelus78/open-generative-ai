@@ -1,6 +1,6 @@
 import { t } from '../lib/i18n.js';
 import { sendToMovie } from '../lib/movieHandoff.js';
-import { createPromptSwitches } from '../lib/studioHelpers.js';
+import { createPromptSwitches, reviewEnhancedPrompt } from '../lib/studioHelpers.js';
 
 // Music creator: instrumental music and sound effects from a text description, made on this PC with
 // Stable Audio 3 through Wan2GP. Results can be listened to, saved, and sent to the Movie as its soundtrack.
@@ -143,13 +143,16 @@ export function MusicStudio() {
         const count = Number(els.count.value) || 1;
         const seedText = els.seed.value.trim();
         const seed = /^[0-9]+$/.test(seedText) ? Number(seedText) : undefined;
+        // ✨ Enhance: the rewritten prompt is shown (and can be edited) first; every version uses it.
+        const review = await reviewEnhancedPrompt({ text: prompt, kind: kind === 'sfx' ? 'sfx' : 'music', after: promptSwitches || els.prompt });
+        if (!review) return;
         stopped = false;
         setRunning(true);
         els.bar.style.width = '0%';
         try {
             for (let i = 0; i < count && !stopped; i++) {
                 els.status.textContent = count > 1 ? `Version ${i + 1} of ${count}…` : 'Starting…';
-                const result = await api().generate({ model: k.model, prompt, duration_seconds: Number(els.len.value), ...(seed !== undefined ? { seed: seed + i } : {}) });
+                const result = await api().generate({ model: k.model, prompt: review.prompt, prompt_ready: review.ready || undefined, duration_seconds: Number(els.len.value), ...(seed !== undefined ? { seed: seed + i } : {}) });
                 if (!result?.path) throw new Error('The audio model returned no file.');
                 history.unshift({ path: result.path, prompt, translated: result.translatedPrompt || '', kind, seconds: Number(els.len.value), seed: result.seed, at: Date.now() });
                 saveHistory(history);

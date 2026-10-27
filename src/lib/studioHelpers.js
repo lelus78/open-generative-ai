@@ -317,6 +317,69 @@ export function createPromptSwitches({ enhance = true, className = '' } = {}) {
     return row;
 }
 
+/**
+ * With ✨ Enhance on, shows the rewritten prompt in a card right after `after` before a local generation starts:
+ * it starts by itself after a 4 s countdown; clicking or typing in the text stops it so it can be edited.
+ * Resolves to { prompt, ready } (ready: the text was reviewed, the backend must not rewrite it again),
+ * to { prompt: text, ready: false } when nothing is rewritten, or to null when the user cancels.
+ */
+export async function reviewEnhancedPrompt({ text, kind, after, seconds = 4 }) {
+    const api = window.localAI;
+    const plain = { prompt: text, ready: false };
+    if (!api?.previewPrompt || !after?.parentNode || !String(text || '').trim()) return plain;
+    try { if (!(await api.getSettings()).enhancePrompts) return plain; } catch { return plain; }
+
+    document.querySelectorAll('.enhance-review').forEach(el => el.remove());
+    const card = document.createElement('div');
+    card.className = 'enhance-review flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 mx-2 mt-2';
+    card.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+            <span class="er-title text-[11px] font-bold text-primary">${t('enhanceReview.working')}</span>
+            <button type="button" class="er-cancel text-[11px] text-white/50 hover:text-white">${t('enhanceReview.cancel')}</button>
+        </div>
+        <textarea spellcheck="false" class="er-text hidden w-full min-h-[70px] rounded-lg bg-black/30 border border-white/10 p-2 text-xs text-white leading-relaxed outline-none focus:border-primary/60 resize-y"></textarea>
+        <div class="er-actions hidden flex items-center gap-2">
+            <button type="button" class="er-go px-3 py-1.5 rounded-lg bg-primary text-black text-xs font-bold"></button>
+            <button type="button" class="er-edit px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/80 text-xs font-bold">${t('enhanceReview.edit')}</button>
+        </div>`;
+    after.after(card);
+    const $ = (s) => card.querySelector(s);
+
+    return new Promise((resolve) => {
+        let timer = null;
+        let done = false;
+        const finish = (value) => {
+            if (done) return;
+            done = true;
+            clearInterval(timer);
+            card.remove();
+            resolve(value);
+        };
+        $('.er-cancel').onclick = () => finish(null);
+
+        api.previewPrompt(text, kind).then((better) => {
+            if (done) return;
+            if (!better) { finish(plain); return; }
+            const area = $('.er-text');
+            area.value = better;
+            area.classList.remove('hidden');
+            $('.er-actions').classList.remove('hidden');
+            $('.er-title').textContent = t('enhanceReview.ready');
+            const go = $('.er-go');
+            const start = () => finish({ prompt: area.value.trim() || text, ready: true });
+            let left = seconds;
+            const paint = () => { go.textContent = timer ? t('enhanceReview.goIn').replace('{n}', left) : t('enhanceReview.go'); };
+            const stop = () => { clearInterval(timer); timer = null; paint(); $('.er-edit').classList.add('hidden'); };
+            timer = setInterval(() => { left -= 1; if (left <= 0) start(); else paint(); }, 1000);
+            paint();
+            go.onclick = start;
+            $('.er-edit').onclick = () => { stop(); area.focus(); };
+            area.addEventListener('focus', stop);
+            area.addEventListener('input', stop);
+        }).catch(() => finish(plain));
+    });
+}
+
 const TOGGLE_SIZES = { normal: 'px-3 py-2 rounded-xl text-xs', compact: 'px-3 py-1.5 rounded-md text-xs', mini: 'px-2.5 py-1 rounded-lg text-[11px]' };
 
 function settingToggle(setting, labels, size) {

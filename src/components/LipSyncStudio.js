@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, createPromptSwitches, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, reviewEnhancedPrompt, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -802,6 +802,13 @@ export function LipSyncStudio() {
             if (!apiKey) { AuthModal(() => generateBtn.click()); return; }
         }
 
+        // ✨ Enhance: the rewritten prompt is shown (and can be edited) before a local generation starts.
+        let review = { prompt, ready: false };
+        if (useLocalModel && prompt && textarea.style.display !== 'none') {
+            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || uploadsRow });
+            if (!review) return;
+        }
+
         hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
         generateBtn.disabled = true;
         generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${t('common.generating')}`;
@@ -824,7 +831,8 @@ export function LipSyncStudio() {
                 try {
                     const res = await localAI.generate({
                         model: selectedModel,
-                        prompt: prompt || '',
+                        prompt: review.prompt || '',
+                        prompt_ready: review.ready || undefined,
                         image: uploadedImageUrl,
                         audio: uploadedAudioUrl,
                         aspect_ratio: await probeAspect(uploadedImageUrl),

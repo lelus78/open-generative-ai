@@ -764,6 +764,8 @@ function register() {
         return { text: params.prompt, translatedPrompt };
     });
     ipcMain.handle('local-ai:enhance-prompt', (_, text) => getTranslator().enhance(text, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
+    // The enhanced prompt shown in the studios before generating (null when Enhance would not rewrite it).
+    ipcMain.handle('local-ai:preview-prompt', (_, text, kind) => getTranslator().previewPrompt(text, kind, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
     ipcMain.handle('local-ai:suggest-stories', (_, request) => getTranslator().stories(request || {}, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
     ipcMain.handle('local-ai:storyboard', (_, request) => getTranslator().storyboard(request || {}, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));
     ipcMain.handle('local-ai:prompt-variants', (_, text, count) => getTranslator().variants(text, count, (message) => getMainWindow()?.webContents.send('local-ai:progress', { status: 'starting', progress: 0, message })));

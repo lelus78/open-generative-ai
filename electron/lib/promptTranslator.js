@@ -510,27 +510,52 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
      * Returns params with prompt (and negative prompt) in English when they were not.
      * `translatedPrompt` is set only when something changed.
      */
+    /**
+     * "Enhance prompts": a short idea, in any language, rewritten in detailed English for `kind` of media.
+     * Null when the switch is off or the prompt is already long. Same idea and kind → same rewrite for this
+     * session, so a batch of takes (and the preview the studios show first) share one prompt.
+     */
+    async function enhanceIdea(text, kind, onStatus) {
+        const prompt = String(text || '').trim();
+        if (!readSettings().enhancePrompts || !kind || !prompt || prompt.split(/s+/).length > ENHANCE_MAX_WORDS) return null;
+        const key = `${kind}
+${prompt}`;
+        if (!enhanced.has(key)) {
+            // translated first: the writer misreads short foreign ideas ("ascia vichinga" became a Viking woman)
+            const english = needsTranslation(prompt) ? await translate(prompt, onStatus) : prompt;
+            enhanced.set(key, await enhance(english, onStatus, kind));
+        }
+        return enhanced.get(key);
+    }
+
+    /** For the studios' preview card: the enhanced prompt, or null when nothing would be rewritten (or it failed). */
+    async function previewPrompt(text, kind, onStatus) {
+        try { return await enhanceIdea(text, kind, onStatus); }
+        catch (err) { debug.warn('enhance', 'preview FAILED: the prompt is used as written', { error: err.message }); return null; }
+    }
+
+    /**
+     * Returns params with prompt (and negative prompt) in English when they were not.
+     * `translatedPrompt` is set only when something changed. `prompt_ready`: the user already saw (and maybe
+     * edited) the enhanced prompt in the preview, so it is only translated, never rewritten again.
+     */
     async function translateParams(params, onStatus, { kind } = {}) {
         const settings = readSettings();
-        const prompt = String(params.prompt || '').trim();
-        // "Enhance prompts": short prompts are rewritten in detailed English (which also translates them).
-        // Same idea and kind → same rewrite for this session, so a batch of takes shares one prompt.
-        if (settings.enhancePrompts && kind && prompt && prompt.split(/\s+/).length <= ENHANCE_MAX_WORDS) {
-            const key = `${kind}\n${prompt}`;
+        if (!params.prompt_ready) {
             try {
-                // translated first: the writer misreads short foreign ideas ("ascia vichinga" became a Viking woman)
-                const english = needsTranslation(prompt) ? await translate(prompt, onStatus) : prompt;
-                if (!enhanced.has(key)) enhanced.set(key, await enhance(english, onStatus, kind));
-                const next = { ...params, prompt: enhanced.get(key) };
-                if (settings.translatePrompts && needsTranslation(params.negative_prompt)) next.negative_prompt = await translate(String(params.negative_prompt).trim(), onStatus);
-                return { params: next, translatedPrompt: next.prompt };
+                const better = await enhanceIdea(params.prompt, kind, onStatus);
+                if (better) {
+                    const next = { ...params, prompt: better };
+                    if (settings.translatePrompts && needsTranslation(params.negative_prompt)) next.negative_prompt = await translate(String(params.negative_prompt).trim(), onStatus);
+                    return { params: next, translatedPrompt: better };
+                }
             } catch (err) {
                 debug.warn('enhance', 'FAILED: falling back to plain translation', { error: err.message });
             }
         }
         if (!settings.translatePrompts) {
             debug.info('translate', 'turned off in the settings: the prompt is sent as written', { prompt: params.prompt });
-            return { params, translatedPrompt: null };
+            return { params, translatedPrompt: params.prompt_ready ? params.prompt : null };
         }
         const next = { ...params };
         let translatedPrompt = null;
@@ -542,11 +567,12 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
         if (needsTranslation(params.negative_prompt)) {
             next.negative_prompt = await translate(String(params.negative_prompt).trim(), onStatus);
         }
-        return { params: next, translatedPrompt };
+        return { params: next, translatedPrompt: translatedPrompt || (params.prompt_ready ? next.prompt : null) };
     }
 
     return {
         enhance,
+        previewPrompt,
         variants,
         stories,
         storyboard,

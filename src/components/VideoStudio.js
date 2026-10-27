@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, createPromptSwitches, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, reviewEnhancedPrompt, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
@@ -1320,6 +1320,13 @@ export function VideoStudio() {
             }
         }
 
+        // ✨ Enhance: the rewritten prompt is shown (and can be edited) before a local generation starts.
+        let review = { prompt, ready: false };
+        if (isLocal && prompt) {
+            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || topRow });
+            if (!review) return;
+        }
+
         hero.classList.add('opacity-0', 'scale-95', '-translate-y-10', 'pointer-events-none');
         generateBtn.disabled = true;
         generateBtn.innerHTML = `<span class="animate-spin inline-block mr-2 text-black">◌</span> ${t('common.generating')}`;
@@ -1351,7 +1358,8 @@ export function VideoStudio() {
             if (isLocal) {
                 const localParams = {
                     model: selectedModel,
-                    prompt: prompt || '',
+                    prompt: review.prompt || '',
+                    prompt_ready: review.ready || undefined,
                     aspect_ratio: selectedAr,
                 };
                 if (imageMode && uploadedImageUrl) localParams.image = uploadedImageUrl;
