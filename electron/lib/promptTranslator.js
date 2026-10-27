@@ -75,11 +75,17 @@ const ENHANCE_SYSTEM_PROMPTS = {
     image: ENHANCE_SYSTEM_PROMPT,
     video: 'You rewrite short ideas into rich prompts for an AI video generator. Output only the final prompt in English, as one paragraph of 50 to 90 words. '
         + 'Describe the subject, the action as it unfolds, camera movement, setting, lighting and mood. ' + ENHANCE_RULES,
-    music: 'You rewrite short ideas into prompts for an AI music generator. Output only the final prompt in English, as one comma-separated line of 15 to 35 words, '
-        + 'for example: "epic cinematic battle music, thundering taiko and frame drums, low brass, male choir chants, 120 BPM, driving rhythm, huge reverb". '
-        + 'Pick the genre, instruments and tempo that fit the idea; no labels such as "genre:" or "mood:". Do not write lyrics. ' + ENHANCE_RULES,
-    sfx: 'You rewrite short ideas into prompts for an AI sound-effect generator. Output only the final prompt in English, as one line of 10 to 25 words. '
-        + 'Describe the sound source, the material, the space and distance, and how the sound starts, evolves and ends. No music. ' + ENHANCE_RULES,
+    // Stable Audio 3 wants one sentence about the sound itself, like Wan2GP's own examples; stories and scene
+    // details ("near the owner on a sunny porch", "starts with… evolves… ends with…") confuse it.
+    music: 'You rewrite short ideas into prompts for the Stable Audio music model. Output only the final prompt in English: one sentence of 12 to 28 words, '
+        + 'like "Lo-fi house loop with warm tape saturation, mellow bass, soft vinyl crackle, and a relaxed 120 BPM groove." '
+        + 'Name the genre, the main instruments, the mood, the tempo in BPM and the production texture. No story, no scene, no lyrics, no labels such as "genre:". '
+        + ENHANCE_RULES,
+    sfx: 'You rewrite short ideas into prompts for the Stable Audio sound-effect model. Output only the final prompt in English: one short sentence of 8 to 20 words, '
+        + 'like "A crisp cinematic whoosh swelling into a bright impact hit with clean transient detail and a short metallic tail." '
+        + 'Describe only the sound itself: its source, material, texture and size, the attack and the tail, and the space (close-miked, dry room, distant, large hall). '
+        + 'One sound or one continuous ambience. No story, no people or feelings, no scenery that makes no sound, no music. '
+        + ENHANCE_RULES,
 };
 // Prompts this long are already detailed (or written by an AI assistant): they are only translated.
 const ENHANCE_MAX_WORDS = 40;
