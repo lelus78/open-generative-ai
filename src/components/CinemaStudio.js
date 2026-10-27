@@ -8,7 +8,7 @@ import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
 import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
@@ -151,6 +151,9 @@ export function CinemaStudio() {
     };
 
     leftColumn.appendChild(inputRow);
+    // Cinema builds the look from the camera settings: the subject is only translated, not rewritten
+    const promptSwitches = createPromptSwitches({ enhance: false });
+    if (promptSwitches) leftColumn.appendChild(promptSwitches);
 
     // 2. Settings Toolbar (Bottom Left)
     // 2. Settings Toolbar (Bottom Left)
@@ -728,6 +731,7 @@ export function CinemaStudio() {
                 model: selectedLocalModel,
                 prompt: finalPrompt,
                 negative_prompt: 'blurry, low quality, distortion, bad composition, camera, tripod, film crew, photographer',
+                cinema: true,
                 aspect_ratio: currentSettings.aspect_ratio,
             }) : await muapi.generateImage({
                 model: 'nano-banana-pro',

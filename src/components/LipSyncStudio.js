@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -278,6 +278,8 @@ export function LipSyncStudio() {
     uploadsRow.appendChild(audioPickerBtn);
     uploadsRow.appendChild(textarea);
     bar.appendChild(uploadsRow);
+    const promptSwitches = createPromptSwitches({ className: 'px-2' });
+    if (promptSwitches) bar.appendChild(promptSwitches);
 
     // ── Status labels ──
     const statusRow = document.createElement('div');

@@ -14,7 +14,7 @@ import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../li
 import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { SHEETS, applySheet, pickSheetAspect, nextSheet } from '../lib/contactSheet.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { takeEntryToShow } from '../lib/externalResults.js';
 import { MAX_REPEATS, planVariants } from '../lib/promptVariants.js';
 import { createHistoryPanel } from './HistoryPanel.js';
@@ -213,6 +213,8 @@ export function ImageStudio() {
     topRow.appendChild(textarea);
     const promptHistory = attachPromptHistory(textarea, 'image_prompt_history');
     bar.appendChild(topRow);
+    const promptSwitches = createPromptSwitches({ className: 'px-2 pt-2' });
+    if (promptSwitches) bar.appendChild(promptSwitches);
 
     // Bottom Row: Controls
     const bottomRow = document.createElement('div');

@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes, resultFileName } from '../lib/studioHelpers.js';
+import { attachPromptHistory, createPromptSwitches, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
@@ -366,6 +366,8 @@ export function VideoStudio() {
     topRow.appendChild(textarea);
     const promptHistory = attachPromptHistory(textarea, 'video_prompt_history');
     bar.appendChild(topRow);
+    const promptSwitches = createPromptSwitches({ className: 'px-2 pt-2' });
+    if (promptSwitches) bar.appendChild(promptSwitches);
 
     // Extend mode banner (shown when extend model is active, not editable by user)
     const extendBanner = document.createElement('div');

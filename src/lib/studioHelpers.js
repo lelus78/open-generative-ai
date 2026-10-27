@@ -294,25 +294,54 @@ export function localProgressLabel({ status, step, totalSteps, downloadedBytes, 
  * Returns null outside Electron, where nothing is translated locally.
  */
 export function createTranslateToggle({ compact = false } = {}) {
+    return settingToggle('translatePrompts', 'translate', compact ? 'compact' : 'normal');
+}
+
+/** Same kind of button for the automatic enhancer: short prompts are rewritten in detailed English before generating. */
+export function createEnhanceToggle({ compact = false } = {}) {
+    return settingToggle('enhancePrompts', 'enhanceAuto', compact ? 'compact' : 'normal');
+}
+
+/**
+ * The Translate / Enhance switches as a small row to put right under a prompt field. `enhance: false` for
+ * studios whose prompt is only translated (Cinema composes its own look, H3 keeps the reference names).
+ * Returns null outside Electron.
+ */
+export function createPromptSwitches({ enhance = true, className = '' } = {}) {
+    const translate = settingToggle('translatePrompts', 'translate', 'mini');
+    if (!translate) return null;
+    const row = document.createElement('div');
+    row.className = `flex flex-wrap items-center gap-1.5 ${className}`;
+    row.appendChild(translate);
+    if (enhance) row.appendChild(settingToggle('enhancePrompts', 'enhanceAuto', 'mini'));
+    return row;
+}
+
+const TOGGLE_SIZES = { normal: 'px-3 py-2 rounded-xl text-xs', compact: 'px-3 py-1.5 rounded-md text-xs', mini: 'px-2.5 py-1 rounded-lg text-[11px]' };
+
+function settingToggle(setting, labels, size) {
     const api = window.localAI;
     if (!api?.getSettings) return null;
     const btn = document.createElement('button');
     btn.type = 'button';
-    let enabled = true;
+    let enabled = setting === 'translatePrompts';
     const paint = () => {
-        btn.className = `flex items-center gap-1.5 ${compact ? 'px-3 py-1.5 rounded-md' : 'px-3 py-2 rounded-xl'} transition-all border text-xs font-bold whitespace-nowrap ${enabled
+        btn.className = `flex items-center gap-1.5 ${TOGGLE_SIZES[size] || TOGGLE_SIZES.normal} transition-all border font-bold whitespace-nowrap ${enabled
             ? 'bg-primary/20 border-primary/40 text-primary'
             : 'bg-white/5 border-white/5 text-white/50 hover:bg-white/10'}`;
-        btn.textContent = enabled ? t('translate.on') : t('translate.off');
-        btn.title = t('translate.help');
+        btn.textContent = enabled ? t(`${labels}.on`) : t(`${labels}.off`);
+        btn.title = t(`${labels}.help`);
     };
     paint();
-    api.getSettings().then(s => { enabled = !!s.translatePrompts; paint(); }).catch(() => {});
+    api.getSettings().then(s => { enabled = !!s[setting]; paint(); }).catch(() => {});
+    // the same switches in Settings → Local Models keep this button in step
+    window.addEventListener('local-settings:changed', (e) => { if (setting in (e.detail || {})) { enabled = !!e.detail[setting]; paint(); } });
     btn.onclick = async (e) => {
         e.stopPropagation();
         enabled = !enabled;
         paint();
-        try { await api.setSettings({ translatePrompts: enabled }); } catch { /* keep UI state */ }
+        try { await api.setSettings({ [setting]: enabled }); } catch { /* keep UI state */ }
+        window.dispatchEvent(new CustomEvent('local-settings:changed', { detail: { [setting]: enabled } }));
     };
     return btn;
 }

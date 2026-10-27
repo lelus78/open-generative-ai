@@ -496,6 +496,10 @@ export function LocalModelManager() {
             <input id="local-translate" type="checkbox" class="mt-0.5 accent-cyan-400">
             <span>${t('localModels.translatePrompts')}<span class="block text-[10px] text-muted">${t('localModels.translatePromptsHelp')}</span></span>
         </label>
+        <label class="flex items-start gap-2 text-[11px] text-white/80 cursor-pointer">
+            <input id="local-enhance" type="checkbox" class="mt-0.5 accent-cyan-400">
+            <span>${t('localModels.enhancePrompts')}<span class="block text-[10px] text-muted">${t('localModels.enhancePromptsHelp')}</span></span>
+        </label>
         <div class="flex flex-col gap-1.5">
             <div class="flex items-center justify-between gap-3">
                 <span class="text-[11px] text-white/80">Writer model (Enhance, variants, translation)</span>
@@ -519,8 +523,19 @@ export function LocalModelManager() {
     const storageEl = modelsSection.querySelector('#local-model-storage');
     const hwEl = modelsSection.querySelector('#local-model-hw');
     const translateEl = modelsSection.querySelector('#local-translate');
-    localAI.getLocalSettings().then(s => { translateEl.checked = !!s.translatePrompts; });
-    translateEl.onchange = () => { localAI.setLocalSettings({ translatePrompts: translateEl.checked }); };
+    const enhanceEl = modelsSection.querySelector('#local-enhance');
+    localAI.getLocalSettings().then(s => { translateEl.checked = !!s.translatePrompts; enhanceEl.checked = !!s.enhancePrompts; });
+    // the switches in the header follow these boxes (and the other way round)
+    const saveSwitch = (patch) => {
+        localAI.setLocalSettings(patch);
+        window.dispatchEvent(new CustomEvent('local-settings:changed', { detail: patch }));
+    };
+    translateEl.onchange = () => saveSwitch({ translatePrompts: translateEl.checked });
+    enhanceEl.onchange = () => saveSwitch({ enhancePrompts: enhanceEl.checked });
+    window.addEventListener('local-settings:changed', (e) => {
+        if ('translatePrompts' in (e.detail || {})) translateEl.checked = !!e.detail.translatePrompts;
+        if ('enhancePrompts' in (e.detail || {})) enhanceEl.checked = !!e.detail.enhancePrompts;
+    });
     const writerInfoEl = modelsSection.querySelector('#local-writer-info');
     const paintWriter = (s) => {
         writerInfoEl.textContent = !s?.writerModel ? 'Default: Qwen3-4B from Z-Image Turbo'

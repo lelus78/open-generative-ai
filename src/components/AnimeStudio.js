@@ -1,6 +1,7 @@
 import { t } from '../lib/i18n.js';
 import { takeQueuedReferences, imageUrlToFile } from '../lib/animeHandoff.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
+import { createPromptSwitches } from '../lib/studioHelpers.js';
 
 // MiniMax H3 reference-to-video through the user's own ComfyUI (desktop app only).
 // References (characters / places / objects) + a few sentences → a 4–15 s clip with sound.
@@ -148,6 +149,9 @@ export function AnimeStudio() {
         genres: $('.h3-genres'), suggest: $('.h3-suggest'), ideas: $('.h3-ideas'),
         toMovie: $('.h3-to-movie'), progress: $('.h3-progress'), phase: $('.h3-phase'), elapsed: $('.h3-elapsed'), bar: $('.h3-bar'), meta: $('.h3-meta'), history: $('.h3-history'),
     };
+    // the story keeps the reference names, so it is only translated
+    const promptSwitches = createPromptSwitches({ enhance: false });
+    if (promptSwitches) els.story.after(promptSwitches);
 
     // ── Setup banner ────────────────────────────────────────────
     function renderSetup() {

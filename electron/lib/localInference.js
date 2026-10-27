@@ -557,8 +557,9 @@ function getTranslator() {
     }
     return translator;
 }
-function translatePrompts(params, send) {
-    return getTranslator().translateParams(params, (message) => send({ status: 'starting', progress: 0, message }));
+// `kind` (image, video, music, sfx) lets the automatic enhancer rewrite the prompt for that media when it is on.
+function translatePrompts(params, send, kind) {
+    return getTranslator().translateParams(params, (message) => send({ status: 'starting', progress: 0, message }), { kind });
 }
 
 async function generate(params, mainWindow) {
@@ -583,7 +584,8 @@ async function generate(params, mainWindow) {
     }
 
     const originalPrompt = params.prompt;
-    const translated = await translatePrompts(params, send);
+    // Cinema Studio composes its own camera look around the subject: it is translated, never rewritten.
+    const translated = await translatePrompts(params, send, params.cinema ? null : 'image');
     params = translated.params;
     debug.info('image', 'prompt for the model', {
         model: model.id, original: originalPrompt, sent: params.prompt,

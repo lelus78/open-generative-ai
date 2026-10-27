@@ -221,7 +221,7 @@ async function generate(params, mainWindow) {
 
     try {
         // Non-English prompts are translated first (English works much better with these models).
-        const translated = await require('./localInference').translatePrompts(params, send);
+        const translated = await require('./localInference').translatePrompts(params, send, params.cinema ? null : model.audioKind || model.type);
         params = translated.params;
 
         if (mode === 'local') {

@@ -1,5 +1,6 @@
 import { t } from '../lib/i18n.js';
 import { sendToMovie } from '../lib/movieHandoff.js';
+import { createPromptSwitches } from '../lib/studioHelpers.js';
 
 // Music creator: instrumental music and sound effects from a text description, made on this PC with
 // Stable Audio 3 through Wan2GP. Results can be listened to, saved, and sent to the Movie as its soundtrack.
@@ -86,6 +87,8 @@ export function MusicStudio() {
         seed: $('.mu-seed'), go: $('.mu-go'), stop: $('.mu-stop'), status: $('.mu-status'), progress: $('.mu-progress'), bar: $('.mu-bar'),
         error: $('.mu-error'), history: $('.mu-history'), folder: $('.mu-folder'),
     };
+    const promptSwitches = createPromptSwitches();
+    if (promptSwitches) els.prompt.after(promptSwitches);
     const showError = (message) => { els.error.textContent = message || ''; els.error.classList.toggle('hidden', !message); };
 
     // ── Kind (music / sound effects) ─────────────────────────────

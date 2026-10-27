@@ -32,6 +32,26 @@ test('non-Latin scripts are always translated', () => {
     assert.equal(needsTranslation('кузнечик на заборе'), true);
 });
 
+test('short tag-style prompts without stopwords are detected by the shape of their words', () => {
+    for (const text of [
+        'tamburi epici nordici, breve',
+        'musica rilassante con pianoforte e pioggia',
+        'chitarra acustica malinconica, voce femminile',
+        'vento forte tra gli alberi',
+        'esplosione',
+        'temporale notturno',
+    ]) assert.equal(needsTranslation(text), true, text);
+    for (const text of [
+        'epic nordic drums, short sting',
+        'lofi hip hop beat, piano and rain',
+        'heavy metal guitar riff',
+        'thunderstorm, heavy rain',
+        'dragon roar',
+        'soft jazz saxophone, cafe ambience',
+        'medieval tavern music with lute and flute',
+    ]) assert.equal(needsTranslation(text), false, text);
+});
+
 test('a couple of foreign words inside an English prompt do not trigger it', () => {
     assert.equal(needsTranslation('a plate of pasta con pesto, studio lighting'), false);
 });

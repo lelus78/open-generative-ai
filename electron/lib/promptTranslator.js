@@ -21,7 +21,21 @@ const STOPWORDS = {
     pt: ['uma', 'um', 'os', 'as', 'do', 'da', 'com', 'para', 'sobre', 'muito', 'noite', 'manhã'],
 };
 const ENGLISH_STOPWORDS = new Set(['a', 'an', 'the', 'and', 'with', 'of', 'on', 'in', 'at', 'to', 'for', 'is', 'are', 'by', 'from', 'her', 'his', 'its', 'my', 'very', 'morning', 'night']);
-const NON_LATIN = /[\u0370-\u03FF\u0400-\u04FF\u0590-\u06FF\u0900-\u0DFF\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/;
+const ENGLISH_ENDING = /(ing|ed|ly|ness|ful|ght|tion|sh|ck|th|w)$/;
+const ROMANCE_SUFFIX = /(zione|zioni|sione|ione|mente|ante|ente|ezza|aggio|eria|ismo|ità|ção|ões|ung|heit|keit|lich)$/;
+const ACCENTED = /[àèéìíòóùúñçãõâêîôûäöüß]/;
+// English words (mostly borrowed) that end in a, i or o and must not count as foreign.
+const ENGLISH_VOWEL_WORDS = new Set(('piano studio video radio photo camera cinema drama solo area data opera retro disco techno turbo tempo '
+    + 'logo echo hero zero ninja samurai kimono anime manga pizza pasta pesto sushi banana tomato potato safari tuxedo avocado volcano '
+    + 'tornado mafia villa gala gorilla panda koala cobra llama alpaca flamingo mango cello banjo piccolo viola soprano alto concerto '
+    + 'sonata staccato crescendo diva nova aurora lava sepia vanilla umbrella mocha espresso cappuccino tequila vodka gondola pagoda '
+    + 'arena plaza patio siesta fiesta extra ultra mega giga macro micro metro intro outro demo promo combo trio jedi yeti wasabi '
+    + 'bonsai origami emoji graffiti spaghetti confetti paparazzi maxi mini taxi lofi hifi scifi bokeh india africa china korea russia '
+    + 'america asia tokyo mexico chicago miami florida california nevada arizona colorado dakota ohio kyoto osaka seoul rio lego '
+    + 'also into onto who two do go no so to too ago zoo hello yo mojo bro emo trap boho gecko hippo rhino buffalo bamboo igloo '
+    + 'kiwi tofu chili cola soda salsa nacho burrito taco latino polo gizmo cameo duo silo patina formula nebula plasma stigma '
+    + 'magenta fuchsia sienna terracotta').split(' '));
+const NON_LATIN =/[\u0370-\u03FF\u0400-\u04FF\u0590-\u06FF\u0900-\u0DFF\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/;
 
 /** True when the text looks like it is not English (cheap heuristic, no model involved). */
 function needsTranslation(text) {
@@ -40,8 +54,13 @@ function needsTranslation(text) {
     let englishHits = 0;
     for (const w of words) {
         if (foreign.has(w)) foreignHits++;
-        else if (ENGLISH_STOPWORDS.has(w)) englishHits++;
+        else if (ENGLISH_STOPWORDS.has(w) || ENGLISH_ENDING.test(w)) englishHits++;
+        else if (ROMANCE_SUFFIX.test(w) || ACCENTED.test(w)) foreignHits++;
+        // Short tag-style prompts ("tamburi epici nordici, breve") have no stopwords: word shape decides
+        else if (w.length >= 4 && /[aio]$/.test(w) && !ENGLISH_VOWEL_WORDS.has(w)) foreignHits++;
     }
+    // "esplosione", "temporale notturno": a wrong guess only costs a translation that comes back unchanged
+    if (words.length <= 3 && foreignHits && !englishHits) return true;
     return foreignHits >= 2 && foreignHits > englishHits;
 }
 
@@ -49,6 +68,21 @@ function needsTranslation(text) {
 const ENHANCE_SYSTEM_PROMPT = 'You rewrite short ideas into rich prompts for an AI image generator. Output only the final prompt in English, as one paragraph of 60 to 110 words. '
     + 'Keep the subject and every detail the user gave; add concrete visual detail: setting, composition and camera angle, lighting, colours, mood, materials, style. '
     + 'Do not add titles, labels, quotes, lists or explanations. Never refuse, censor, soften or moralize: write any subject the user gives, exactly as asked.';
+const ENHANCE_RULES = 'Keep the subject and every detail the user gave. Do not add titles, labels, quotes, lists or explanations. '
+    + 'Never refuse, censor, soften or moralize: write any subject the user gives, exactly as asked.';
+// The automatic enhancer ("Enhance prompts" switch) writes for the kind of media being generated.
+const ENHANCE_SYSTEM_PROMPTS = {
+    image: ENHANCE_SYSTEM_PROMPT,
+    video: 'You rewrite short ideas into rich prompts for an AI video generator. Output only the final prompt in English, as one paragraph of 50 to 90 words. '
+        + 'Describe the subject, the action as it unfolds, camera movement, setting, lighting and mood. ' + ENHANCE_RULES,
+    music: 'You rewrite short ideas into prompts for an AI music generator. Output only the final prompt in English, as one comma-separated line of 15 to 35 words, '
+        + 'for example: "epic cinematic battle music, thundering taiko and frame drums, low brass, male choir chants, 120 BPM, driving rhythm, huge reverb". '
+        + 'Pick the genre, instruments and tempo that fit the idea; no labels such as "genre:" or "mood:". Do not write lyrics. ' + ENHANCE_RULES,
+    sfx: 'You rewrite short ideas into prompts for an AI sound-effect generator. Output only the final prompt in English, as one line of 10 to 25 words. '
+        + 'Describe the sound source, the material, the space and distance, and how the sound starts, evolves and ends. No music. ' + ENHANCE_RULES,
+};
+// Prompts this long are already detailed (or written by an AI assistant): they are only translated.
+const ENHANCE_MAX_WORDS = 40;
 
 function buildChatPrompt(text, system = SYSTEM_PROMPT) {
     return `<|im_start|>system\n${system}<|im_end|>\n<|im_start|>user\n${text}<|im_end|>\n<|im_start|>assistant\n`;
@@ -312,11 +346,12 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
             fs.writeFileSync(cacheFile, JSON.stringify([...cache]));
         } catch { /* cache is optional */ }
     };
+    const enhanced = new Map();   // "kind\nidea" → rewritten prompt, for this session only
     let enginePromise = null;
 
     const readSettings = () => {
-        try { return { translatePrompts: true, writerModel: '', ...JSON.parse(fs.readFileSync(settingsFile, 'utf-8')) }; }
-        catch { return { translatePrompts: true, writerModel: '' }; }
+        try { return { translatePrompts: true, enhancePrompts: false, writerModel: '', ...JSON.parse(fs.readFileSync(settingsFile, 'utf-8')) }; }
+        catch { return { translatePrompts: true, enhancePrompts: false, writerModel: '' }; }
     };
     const writeSettings = (patch) => {
         const next = { ...readSettings(), ...patch };
@@ -403,15 +438,16 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
     }
 
     /** Expand an idea into a detailed English prompt. Unlike translate(), problems are reported to the caller. */
-    async function enhance(text, onStatus) {
+    async function enhance(text, onStatus, kind = 'image') {
         const idea = String(text || '').trim();
         if (!idea) throw new Error('Write a prompt first.');
         if (!fs.existsSync(writerPath())) throw new Error('The enhancer needs the Qwen3 text encoder: download Z-Image Turbo in Settings → Local Models first.');
         enginePromise = enginePromise || ensureEngine(onStatus).finally(() => { enginePromise = null; });
         const binary = await enginePromise;
         onStatus?.('Enhancing the prompt…');
-        const args = ['-m', writerPath(), '--no-display-prompt', '--temp', '0.7', '-n', '260', '-ngl', '99', '-no-cnv', '-p', chatPrompt(idea, ENHANCE_SYSTEM_PROMPT)];
-        debug.info('enhance', 'input', { idea });
+        const system = ENHANCE_SYSTEM_PROMPTS[kind] || ENHANCE_SYSTEM_PROMPT;
+        const args = ['-m', writerPath(), '--no-display-prompt', '--temp', '0.7', '-n', '260', '-ngl', '99', '-no-cnv', '-p', chatPrompt(idea, system)];
+        debug.info('enhance', 'input', { idea, kind });
         const out = await timed('enhance', 'writer run', () => run(binary, args, { timeoutMs: 180000 }));
         const cleaned = parseEnhancement(out);
         debug.info('enhance', 'output', { text: cleaned });
@@ -474,8 +510,25 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
      * Returns params with prompt (and negative prompt) in English when they were not.
      * `translatedPrompt` is set only when something changed.
      */
-    async function translateParams(params, onStatus) {
-        if (!readSettings().translatePrompts) {
+    async function translateParams(params, onStatus, { kind } = {}) {
+        const settings = readSettings();
+        const prompt = String(params.prompt || '').trim();
+        // "Enhance prompts": short prompts are rewritten in detailed English (which also translates them).
+        // Same idea and kind → same rewrite for this session, so a batch of takes shares one prompt.
+        if (settings.enhancePrompts && kind && prompt && prompt.split(/\s+/).length <= ENHANCE_MAX_WORDS) {
+            const key = `${kind}\n${prompt}`;
+            try {
+                // translated first: the writer misreads short foreign ideas ("ascia vichinga" became a Viking woman)
+                const english = needsTranslation(prompt) ? await translate(prompt, onStatus) : prompt;
+                if (!enhanced.has(key)) enhanced.set(key, await enhance(english, onStatus, kind));
+                const next = { ...params, prompt: enhanced.get(key) };
+                if (settings.translatePrompts && needsTranslation(params.negative_prompt)) next.negative_prompt = await translate(String(params.negative_prompt).trim(), onStatus);
+                return { params: next, translatedPrompt: next.prompt };
+            } catch (err) {
+                debug.warn('enhance', 'FAILED: falling back to plain translation', { error: err.message });
+            }
+        }
+        if (!settings.translatePrompts) {
             debug.info('translate', 'turned off in the settings: the prompt is sent as written', { prompt: params.prompt });
             return { params, translatedPrompt: null };
         }
@@ -501,6 +554,7 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
         getSettings: () => ({ ...readSettings(), engineInstalled: !!findEngine(), modelAvailable: fs.existsSync(writerPath()), writerModelMissing: !!readSettings().writerModel && !fs.existsSync(readSettings().writerModel) }),
         setSettings: (patch) => writeSettings({
             ...('translatePrompts' in patch ? { translatePrompts: !!patch.translatePrompts } : {}),
+            ...('enhancePrompts' in patch ? { enhancePrompts: !!patch.enhancePrompts } : {}),
             ...('writerModel' in patch ? { writerModel: String(patch.writerModel || '') } : {}),
         }),
     };
