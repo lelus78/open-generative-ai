@@ -81,10 +81,13 @@ const ENHANCE_SYSTEM_PROMPTS = {
         + 'like "Lo-fi house loop with warm tape saturation, mellow bass, soft vinyl crackle, and a relaxed 120 BPM groove." '
         + 'Name the genre, the main instruments, the mood, the tempo in BPM and the production texture. No story, no scene, no lyrics, no labels such as "genre:". '
         + ENHANCE_RULES,
-    sfx: 'You rewrite short ideas into prompts for the Stable Audio sound-effect model. Output only the final prompt in English: one short sentence of 8 to 20 words, '
-        + 'like "A crisp cinematic whoosh swelling into a bright impact hit with clean transient detail and a short metallic tail." '
-        + 'Describe only the sound itself: its source, material, texture and size, the attack and the tail, and the space (close-miked, dry room, distant, large hall). '
-        + 'One sound or one continuous ambience. No story, no people or feelings, no scenery that makes no sound, no music. '
+    sfx: 'You turn a short idea (often not in English) into a prompt for the Stable Audio sound-effect model. Output only the final prompt in English: one plain sentence of 6 to 16 words. '
+        + 'Start with what makes the sound and what it does, keeping every sound and action the idea names, then add at most two or three short details '
+        + '(material, surface, distance or place). Use everyday words, not sound-engineering jargon. No story, no feelings, no music. '
+        + 'Examples: "macchina che parte sgommando" → "Car tires screeching on asphalt as the engine revs hard and the car speeds away"; '
+        + '"porta che cigola" → "Old wooden door slowly creaking open on rusty hinges"; '
+        + '"colpo di pistola in un vicolo" → "Single pistol gunshot echoing in a narrow alley"; '
+        + '"cane che abbaia" → "Medium dog barking twice, outdoors, close". '
         + ENHANCE_RULES,
 };
 // Prompts this long are already detailed (or written by an AI assistant): they are only translated.
@@ -452,7 +455,9 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
         const binary = await enginePromise;
         onStatus?.('Enhancing the prompt…');
         const system = ENHANCE_SYSTEM_PROMPTS[kind] || ENHANCE_SYSTEM_PROMPT;
-        const args = ['-m', writerPath(), '--no-display-prompt', '--temp', '0.7', '-n', '260', '-ngl', '99', '-no-cnv', '-p', chatPrompt(idea, system)];
+        // sounds and music stay close to the idea; pictures get more invention
+        const temp = kind === 'sfx' || kind === 'music' ? '0.3' : '0.7';
+        const args = ['-m', writerPath(), '--no-display-prompt', '--temp', temp, '-n', '260', '-ngl', '99', '-no-cnv', '-p', chatPrompt(idea, system)];
         debug.info('enhance', 'input', { idea, kind });
         const out = await timed('enhance', 'writer run', () => run(binary, args, { timeoutMs: 180000 }));
         const cleaned = parseEnhancement(out);
@@ -523,13 +528,15 @@ function createPromptTranslator({ getPaths, downloadFile, llmFilename, settingsF
      */
     async function enhanceIdea(text, kind, onStatus) {
         const prompt = String(text || '').trim();
-        if (!readSettings().enhancePrompts || !kind || !prompt || prompt.split(/s+/).length > ENHANCE_MAX_WORDS) return null;
-        const key = `${kind}
-${prompt}`;
+        if (!readSettings().enhancePrompts || !kind || !prompt || prompt.split(/\s+/).length > ENHANCE_MAX_WORDS) return null;
+        const key = `${kind}\n${prompt}`;
         if (!enhanced.has(key)) {
-            // translated first: the writer misreads short foreign ideas ("ascia vichinga" became a Viking woman)
+            // The writer gets the idea as typed and its translation: alone it misreads short foreign ideas
+            // ("ascia vichinga" became a Viking woman), while the translation alone can lose a word that matters
+            // ("parte sgommando" became "taking off at high speed", without the screeching tyres).
             const english = needsTranslation(prompt) ? await translate(prompt, onStatus) : prompt;
-            enhanced.set(key, await enhance(english, onStatus, kind));
+            const idea = english === prompt ? prompt : `${prompt}\n(English translation: ${english})`;
+            enhanced.set(key, await enhance(idea, onStatus, kind));
         }
         return enhanced.get(key);
     }
