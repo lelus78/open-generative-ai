@@ -1323,7 +1323,7 @@ export function VideoStudio() {
         // ✨ Enhance: the rewritten prompt is shown (and can be edited) before a local generation starts.
         let review = { prompt, ready: false };
         if (isLocal && prompt) {
-            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || topRow });
+            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || topRow, field: textarea });
             if (!review) return;
         }
 
@@ -1344,7 +1344,7 @@ export function VideoStudio() {
 
         let hadError = false;
         let capturedRequestId = null;
-        const historyMeta = { prompt, model: selectedModel, aspect_ratio: selectedAr, duration: selectedDuration };
+        const historyMeta = { prompt: review.prompt, model: selectedModel, aspect_ratio: selectedAr, duration: selectedDuration };
 
         const onRequestId = (rid) => {
             capturedRequestId = rid;

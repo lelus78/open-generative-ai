@@ -805,7 +805,7 @@ export function LipSyncStudio() {
         // ✨ Enhance: the rewritten prompt is shown (and can be edited) before a local generation starts.
         let review = { prompt, ready: false };
         if (useLocalModel && prompt && textarea.style.display !== 'none') {
-            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || uploadsRow });
+            review = await reviewEnhancedPrompt({ text: prompt, kind: 'video', after: promptSwitches || uploadsRow, field: textarea });
             if (!review) return;
         }
 
@@ -815,7 +815,7 @@ export function LipSyncStudio() {
 
         let hadError = false;
         let capturedRequestId = null;
-        const historyMeta = { prompt, model: selectedModel };
+        const historyMeta = { prompt: review.prompt, model: selectedModel };
 
         const onRequestId = (rid) => {
             capturedRequestId = rid;
@@ -838,7 +838,7 @@ export function LipSyncStudio() {
                         aspect_ratio: await probeAspect(uploadedImageUrl),
                     });
                     if (!res?.url) throw new Error('No video URL returned by Wan2GP');
-                    addToHistory({ id: Date.now().toString(), url: res.url, prompt, model: selectedModel, path: res.path, timestamp: new Date().toISOString() });
+                    addToHistory({ id: Date.now().toString(), url: res.url, prompt: review.prompt, model: selectedModel, path: res.path, timestamp: new Date().toISOString() });
                     showVideoInCanvas(res.url);
                 } finally {
                     unsubscribe();

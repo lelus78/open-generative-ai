@@ -144,7 +144,7 @@ export function MusicStudio() {
         const seedText = els.seed.value.trim();
         const seed = /^[0-9]+$/.test(seedText) ? Number(seedText) : undefined;
         // ✨ Enhance: the rewritten prompt is shown (and can be edited) first; every version uses it.
-        const review = await reviewEnhancedPrompt({ text: prompt, kind: kind === 'sfx' ? 'sfx' : 'music', after: promptSwitches || els.prompt });
+        const review = await reviewEnhancedPrompt({ text: prompt, kind: kind === 'sfx' ? 'sfx' : 'music', after: promptSwitches || els.prompt, field: els.prompt });
         if (!review) return;
         stopped = false;
         setRunning(true);
@@ -154,7 +154,7 @@ export function MusicStudio() {
                 els.status.textContent = count > 1 ? `Version ${i + 1} of ${count}…` : 'Starting…';
                 const result = await api().generate({ model: k.model, prompt: review.prompt, prompt_ready: review.ready || undefined, duration_seconds: Number(els.len.value), ...(seed !== undefined ? { seed: seed + i } : {}) });
                 if (!result?.path) throw new Error('The audio model returned no file.');
-                history.unshift({ path: result.path, prompt, translated: result.translatedPrompt || '', kind, seconds: Number(els.len.value), seed: result.seed, at: Date.now() });
+                history.unshift({ path: result.path, prompt: review.prompt, translated: result.translatedPrompt || '', kind, seconds: Number(els.len.value), seed: result.seed, at: Date.now() });
                 saveHistory(history);
                 renderHistory();
             }

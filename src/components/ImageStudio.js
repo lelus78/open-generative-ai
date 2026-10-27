@@ -1498,7 +1498,7 @@ export function ImageStudio() {
             // ✨ Enhance: one plain prompt (no variants, no sheet) is shown rewritten before it is generated.
             let ready = false;
             if (!imageMode && sheet === 'off' && prompts.every((p) => p === prompt)) {
-                const review = await reviewEnhancedPrompt({ text: prompt, kind: 'image', after: promptSwitches || topRow });
+                const review = await reviewEnhancedPrompt({ text: prompt, kind: 'image', after: promptSwitches || topRow, field: textarea });
                 if (!review) return;
                 ready = review.ready;
                 prompts = prompts.map(() => review.prompt);
@@ -1508,7 +1508,7 @@ export function ImageStudio() {
             prompts.forEach((p, i) => {
                 localQueue.push({
                     modelId: localModelId,
-                    prompt: ready ? prompt : p,   // the history keeps what was typed; the rewrite is its translatedPrompt
+                    prompt: p,
                     sent: imageMode ? p : applyStyle(applySheet(sheet, subjects[i])),
                     prompt_ready: ready || undefined,
                     sheet: sheet !== 'off' ? sheet : undefined,

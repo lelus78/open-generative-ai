@@ -322,10 +322,14 @@ export function createPromptSwitches({ enhance = true, className = '' } = {}) {
  * it starts by itself after a 4 s countdown; clicking or typing in the text stops it so it can be edited.
  * Resolves to { prompt, ready } (ready: the text was reviewed, the backend must not rewrite it again),
  * to { prompt: text, ready: false } when nothing is rewritten, or to null when the user cancels.
+ * The accepted text replaces what was typed in `field`, so it can be reused or edited; generating it again
+ * sends it as it is, without a second rewrite.
  */
-export async function reviewEnhancedPrompt({ text, kind, after, seconds = 4 }) {
+const acceptedPrompts = new Set();
+export async function reviewEnhancedPrompt({ text, kind, after, field, seconds = 4 }) {
     const api = window.localAI;
     const plain = { prompt: text, ready: false };
+    if (acceptedPrompts.has(String(text || '').trim())) return { prompt: text, ready: true };
     if (!api?.previewPrompt || !after?.parentNode || !String(text || '').trim()) return plain;
     try { if (!(await api.getSettings()).enhancePrompts) return plain; } catch { return plain; }
 
@@ -366,7 +370,15 @@ export async function reviewEnhancedPrompt({ text, kind, after, seconds = 4 }) {
             $('.er-actions').classList.remove('hidden');
             $('.er-title').textContent = t('enhanceReview.ready');
             const go = $('.er-go');
-            const start = () => finish({ prompt: area.value.trim() || text, ready: true });
+            const start = () => {
+                const final = area.value.trim() || text;
+                acceptedPrompts.add(final);
+                if (field) {
+                    field.value = final;
+                    field.dispatchEvent(new Event('input', { bubbles: true }));   // auto-height, prompt history
+                }
+                finish({ prompt: final, ready: true });
+            };
             let left = seconds;
             const paint = () => { go.textContent = timer ? t('enhanceReview.goIn').replace('{n}', left) : t('enhanceReview.go'); };
             const stop = () => { clearInterval(timer); timer = null; paint(); $('.er-edit').classList.add('hidden'); };
