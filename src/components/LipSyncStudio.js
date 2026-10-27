@@ -7,7 +7,7 @@ import { localLipSyncModels } from '../lib/localModels.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
 import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function LipSyncStudio() {
@@ -555,7 +555,7 @@ export function LipSyncStudio() {
         },
         onOpen: (e) => showVideoInCanvas(e.url),
         onDelete: (e, opts) => deleteEntry(e, opts),
-        onDownload: (e) => downloadFile(e.url, `lipsync-${e.id || 'clip'}.mp4`),
+        onDownload: (e) => downloadFile(e.url, resultFileName(e, 'lip sync', '.mp4')),
         onReuse: (e) => {
             newBtn.click();
             textarea.value = e.prompt || '';
@@ -716,7 +716,7 @@ export function LipSyncStudio() {
         const current = resultVideo.src;
         if (current) {
             const entry = generationHistory.find(e => e.url === current);
-            downloadFile(current, `lipsync-${entry?.id || 'clip'}.mp4`);
+            downloadFile(current, resultFileName(entry, 'lip sync', '.mp4'));
         }
     };
 

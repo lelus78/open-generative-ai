@@ -4,6 +4,22 @@ import { t, tf } from './i18n.js';
 // copying a result to the clipboard, and paste / drag & drop of media files.
 
 /**
+ * The name a downloaded result gets: date first (so saved files sort by time), then what it shows,
+ * e.g. "2026-10-27 10-49-34 - a fox in the snow.png". The browser fixes the extension to the real type.
+ */
+export function resultFileName(entry, kind, ext) {
+    const value = entry?.timestamp;
+    const parsed = typeof value === 'number' ? value : Date.parse(value);
+    const fromId = Number(entry?.id);
+    const d = new Date(Number.isFinite(parsed) ? parsed : fromId > 1e12 ? fromId : Date.now());
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+    let what = String(entry?.prompt || entry?.settings?.prompt || '').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (what.length > 60) what = what.slice(0, 60).replace(/\s+\S*$/, '');
+    return `${stamp} - ${what.replace(/[. ]+$/, '') || kind}${ext}`;
+}
+
+/**
  * ArrowUp / ArrowDown in the prompt box cycle through the last 10 prompts (kept in localStorage).
  * ArrowUp only acts when the box is empty or the caret is at the very start, so editing a
  * multi-line prompt still works. Returns `remember(text)` to call when a generation starts.

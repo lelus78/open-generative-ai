@@ -7,7 +7,8 @@
 // answers with its id; `job_status` waits for it. A single GPU lane keeps two engines from running at once.
 const fs = require('fs');
 const path = require('path');
-const { pickModel } = require('./mcpTools');
+const { pickModel, READS, MAKES, STOPS } = require('./mcpTools');
+const reel = require('./reelDirector');
 
 const text = (value) => ({ type: 'text', text: value });
 const MAX_WAIT = 55;
@@ -22,17 +23,20 @@ const QUALITY = {
 function createJobs({ now = () => Date.now(), keep = 60 } = {}) {
     const jobs = new Map();
     const lanes = new Map();
+    const listeners = new Set();
     let counter = 0;
+    const changed = (job) => { for (const listener of listeners) { try { listener(job); } catch { /* a listener must not stop a job */ } } };
 
     function start({ name, lane = 'gpu', run, cancel }) {
-        const job = { id: `job-${++counter}`, name, lane, state: 'queued', createdAt: now(), startedAt: null, finishedAt: null, result: null, error: null, cancelRequested: false, cancel };
+        const job = { id: `job-${++counter}`, name, lane, state: 'queued', createdAt: now(), startedAt: null, finishedAt: null, result: null, error: null, progress: null, cancelRequested: false, cancel };
         jobs.set(job.id, job);
         for (const id of [...jobs.keys()].slice(0, Math.max(0, jobs.size - keep))) { if (jobs.get(id).finishedAt) jobs.delete(id); }
         const previous = lanes.get(lane) || Promise.resolve();
         job.done = previous.catch(() => {}).then(async () => {
-            if (job.cancelRequested) { job.state = 'cancelled'; job.finishedAt = now(); return; }
+            if (job.cancelRequested) { job.state = 'cancelled'; job.finishedAt = now(); changed(job); return; }
             job.state = 'running';
             job.startedAt = now();
+            changed(job);
             try {
                 job.result = await run(job);
                 job.state = 'done';
@@ -41,8 +45,27 @@ function createJobs({ now = () => Date.now(), keep = 60 } = {}) {
                 job.state = job.cancelRequested || /cancel/i.test(job.error) ? 'cancelled' : 'error';
             }
             job.finishedAt = now();
+            changed(job);
         });
         lanes.set(lane, job.done);
+        changed(job);
+        return job;
+    }
+
+    /** Progress of the job running in a lane, from the engine's own events: { fraction 0..1, phase, message }. */
+    function report(lane, update = {}) {
+        const job = [...jobs.values()].find((j) => j.lane === lane && j.state === 'running');
+        if (!job) return null;
+        const before = job.progress || {};
+        const fraction = Number.isFinite(Number(update.fraction)) && update.fraction !== null ? Math.min(1, Math.max(0, Number(update.fraction))) : before.fraction ?? null;
+        const phase = update.phase || before.phase || '';
+        // The time estimate starts at the first real step of a phase: loading a model is not part of it,
+        // and a phase that starts its own count (H3 sampling, then the sharper pass) starts it again.
+        let since = before.since;
+        if (phase !== before.phase || (since && fraction !== null && fraction < since.fraction)) since = undefined;
+        if (!since && fraction !== null && fraction > 0) since = { at: now(), fraction };
+        job.progress = { fraction, phase, message: update.message ?? before.message ?? '', since };
+        changed(job);
         return job;
     }
 
@@ -60,18 +83,49 @@ function createJobs({ now = () => Date.now(), keep = 60 } = {}) {
         if (job.finishedAt) return false;
         job.cancelRequested = true;
         if (job.state === 'running') { try { job.cancel?.(); } catch { /* the engine may be idle already */ } }
+        changed(job);
         return true;
     }
-    return { start, get, list, wait, cancel };
+    /** Called on every change of a job (queued, running, progress, finished). Returns the unsubscribe function. */
+    function onChange(listener) { listeners.add(listener); return () => listeners.delete(listener); }
+    return { start, get, list, wait, cancel, report, onChange };
 }
 
+/** Seconds left in the current phase, from the pace measured since its first step; null until there is enough to tell. */
+function etaSeconds(job, now = Date.now()) {
+    const p = job.progress;
+    if (job.state !== 'running' || !p?.since || p.fraction === null) return null;
+    const done = p.fraction - p.since.fraction;
+    if (done < 0.05 || now <= p.since.at) return null;
+    return Math.max(0, Math.round(((now - p.since.at) / done) * (1 - p.fraction) / 1000));
+}
+
+/** A job as data: what job_status and list_jobs return as structured content, and what the app shows. */
+function jobInfo(job, now = Date.now()) {
+    const info = { job_id: job.id, name: job.name, state: job.state, seconds: Math.round(((job.finishedAt || now) - (job.startedAt || job.createdAt)) / 1000) };
+    if (job.progress?.fraction !== null && job.progress?.fraction !== undefined) info.progress = Math.round(job.progress.fraction * 100) / 100;
+    if (job.progress?.phase) info.phase = job.progress.phase;
+    const eta = etaSeconds(job, now);
+    if (eta !== null) info.eta_seconds = eta;
+    if (job.result?.path) info.path = job.result.path;
+    if (job.result?.data) info.result = job.result.data;
+    if (job.error) info.error = job.error;
+    return info;
+}
+
+const formatSeconds = (s) => (s >= 90 ? `${Math.round(s / 60)} min` : `${s} s`);
+
 function describeJob(job, now = Date.now()) {
-    const seconds = Math.round(((job.finishedAt || now) - (job.startedAt || job.createdAt)) / 1000);
+    const { seconds, progress, phase, eta_seconds: eta } = jobInfo(job, now);
     if (job.state === 'done') return `${job.id} (${job.name}) is done after ${seconds} s.\n${job.result?.summary || ''}`.trim();
     if (job.state === 'error') return `${job.id} (${job.name}) failed: ${job.error}`;
     if (job.state === 'cancelled') return `${job.id} (${job.name}) was cancelled.`;
     if (job.state === 'queued') return `${job.id} (${job.name}) is waiting for the engine to be free.`;
-    return `${job.id} (${job.name}) is still running (${seconds} s so far). Ask again with job_status ${job.id} and wait_seconds.`;
+    const where = [
+        progress !== undefined ? `${Math.round(progress * 100)}%${phase ? ` of ${phase}` : ''}` : phase || '',
+        eta !== undefined ? `about ${formatSeconds(eta)} left` : '',
+    ].filter(Boolean).join(', ');
+    return `${job.id} (${job.name}) is still running (${seconds} s so far${where ? `; ${where}` : ''}). Ask again with job_status ${job.id} and wait_seconds.`;
 }
 
 // ─── Pure helpers ───────────────────────────────────────────────────
@@ -137,6 +191,7 @@ function buildMovieProject(args = {}, { options, fileOk = (f) => path.isAbsolute
 
     if (args.music_path && !fileOk(args.music_path)) throw new Error('music_path must be the absolute path of an existing audio file.');
     return {
+        ...(String(args.name || '').trim() ? { name: String(args.name).trim() } : {}),
         ...size,
         fps: [24, 25, 30, 60].includes(Number(args.fps)) ? Number(args.fps) : 24,
         transition: args.transition || 'fade',
@@ -166,6 +221,7 @@ function buildInterfaceProject(project, durations = {}) {
         format: `${project.width}x${project.height}`, fps: project.fps, transition: project.transition, transitionSeconds: project.transitionSeconds,
         keepAudio: project.keepClipAudio, fadeInOut: project.fadeInOut,
         music: project.music?.path || null, musicVolume: project.music?.volume ?? 0.4,
+        ...(project.name ? { name: project.name } : {}),
     };
 }
 
@@ -210,7 +266,7 @@ function createMediaTools(deps) {
         });
         await jobs.wait(job, wait === undefined ? 25 : wait);
         if (job.state === 'error') throw new Error(job.error);
-        return { content: [text(describeJob(job))] };
+        return { content: [text(describeJob(job))], structuredContent: jobInfo(job) };
     }
 
     const fileOk = deps.fileOk || ((f) => path.isAbsolute(String(f || '')) && fs.existsSync(f) && fs.statSync(f).isFile());
@@ -220,6 +276,7 @@ function createMediaTools(deps) {
         // ── Video, lip sync, music, sound effects (Wan2GP) ──
         {
             name: 'generate_video',
+            annotations: MAKES,
             description: 'Make a video clip with a local video model (Wan2GP): from a text prompt, or from a picture (image-to-video) when image_path is given. Takes minutes; runs as a job.',
             inputSchema: {
                 type: 'object',
@@ -248,6 +305,7 @@ function createMediaTools(deps) {
         },
         {
             name: 'make_lipsync',
+            annotations: MAKES,
             description: 'Make a talking video from a portrait picture and an audio file (InfiniteTalk, local). The clip lasts as long as the audio. Runs as a job.',
             inputSchema: {
                 type: 'object',
@@ -274,6 +332,7 @@ function createMediaTools(deps) {
         ...[['generate_music', 'wan2gp:stable-audio3-music', 'music', 'Make music from a description (genre, tempo, instruments, mood) with Stable Audio 3, on this PC.'],
             ['generate_sound_effect', 'wan2gp:stable-audio3-sfx', 'sound effect', 'Make a sound effect from a description (a whoosh, a sword clash, rain) with Stable Audio 3, on this PC.']].map(([name, model, noun, description]) => ({
             name,
+            annotations: MAKES,
             description: `${description} Returns an audio file you can use as a movie soundtrack (music_path) or a scene sound (sfx_path). Runs as a job.`,
             inputSchema: {
                 type: 'object',
@@ -298,6 +357,7 @@ function createMediaTools(deps) {
         // ── MiniMax H3 (Anime tab and the movie shots) ──
         {
             name: 'h3_shot',
+            annotations: MAKES,
             description: 'Make a video shot with MiniMax H3 from reference pictures (needs ComfyUI with H3, see movie_options). The references (a character, a place, an object) are what the shot keeps faithful; the story says what happens. Use it for movie shots and for the Anime (H3) tab. A shot takes about 5-12 minutes; runs as a job.',
             inputSchema: {
                 type: 'object',
@@ -331,6 +391,7 @@ function createMediaTools(deps) {
         // ── The movie maker ──
         {
             name: 'movie_options',
+            annotations: READS,
             description: 'What the movie maker offers: transition ids, title and caption styles (the ones whose font is installed), formats, motions and what is installed (ffmpeg, MiniMax H3). Read it before movie_render so the ids are valid.',
             inputSchema: { type: 'object', properties: {} },
             run: async () => {
@@ -351,11 +412,18 @@ function createMediaTools(deps) {
                         'Upscale targets: 1080p, 1440p, 4k; methods: fast (keeps faces natural) or ai (ComfyUI, slow).',
                         status ? `Installed: ${status}` : '',
                     ].filter(Boolean).join('\n'))],
+                    structuredContent: {
+                        transitions: o.transitions.map(([id]) => id),
+                        title_styles: o.titleStyles.map(([id]) => id), caption_styles: o.captionStyles.map(([id]) => id),
+                        motions: ['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'none'], upscale_targets: ['1080p', '1440p', '4k'],
+                        ...(status ? { installed: status } : {}),
+                    },
                 };
             },
         },
         {
             name: 'movie_storyboard',
+            annotations: READS,
             description: 'Let the local writer (Qwen) turn an idea into shots: for each shot a picture/video description, a camera motion, a caption and a sound, plus a title and a music description. The assistant can then make each shot (h3_shot, generate_video), compose the music and call movie_render.',
             inputSchema: {
                 type: 'object',
@@ -373,13 +441,14 @@ function createMediaTools(deps) {
                     tool: 'movie_storyboard', label: 'storyboard', wait: a.wait_seconds,
                     run: async () => {
                         const result = await deps.storyboard({ idea: a.idea, scenes: Math.min(20, Math.max(1, Number(a.shots) || 6)), style: a.style || '', aspect: ASPECTS[a.aspect_ratio] ? a.aspect_ratio : '16:9', refs: (a.references || []).map((r) => ({ role: r.role || 'object', name: r.name, notes: r.notes || '' })) });
-                        return { summary: `Storyboard:\n${JSON.stringify(result, null, 2)}` };
+                        return { summary: `Storyboard:\n${JSON.stringify(result, null, 2)}`, data: result };
                     },
                 });
             },
         },
         {
             name: 'movie_render',
+            annotations: MAKES,
             description: 'Put a movie together with ffmpeg: video clips, pictures and title cards in order, with captions, titles, transitions, the sound of the clips, a music track and fades. Returns the movie file. Use movie_options for the valid ids. Runs as a job (usually seconds).',
             inputSchema: {
                 type: 'object',
@@ -400,6 +469,7 @@ function createMediaTools(deps) {
                             },
                         },
                     },
+                    name: { type: 'string', description: 'Name of the movie: its folder is named after it (with the date), so it is easy to find.' },
                     format: { type: 'string', description: 'width x height, default 1280x720. 720x1280 or 1080x1920 for a vertical reel.' },
                     fps: { type: 'integer', enum: [24, 25, 30, 60] }, transition: { type: 'string' }, transition_seconds: { type: 'number' },
                     music_path: { type: 'string' }, music_volume: { type: 'number', description: '0 to 1, default 0.4.' },
@@ -421,6 +491,7 @@ function createMediaTools(deps) {
         },
         {
             name: 'movie_upscale',
+            annotations: MAKES,
             description: 'Make a finished movie bigger (final upscale to Full HD, 2K or 4K). "fast" is Lanczos with a light sharpen that keeps faces natural; "ai" uses an upscale model in ComfyUI (slow, can smooth faces). Runs as a job.',
             inputSchema: {
                 type: 'object',
@@ -440,6 +511,7 @@ function createMediaTools(deps) {
         },
         {
             name: 'movie_title_clip',
+            annotations: { ...MAKES, destructiveHint: true }, // writes save_path, replacing a file already there
             description: 'Make a title as a video with a transparent background (ProRes 4444 .mov or VP9 .webm) to use in another editor. save_path is where the file goes.',
             inputSchema: {
                 type: 'object',
@@ -460,34 +532,47 @@ function createMediaTools(deps) {
         },
         {
             name: 'movie_last_frame',
+            annotations: MAKES,
             description: 'Save the last frame of a clip as a picture (a look reference for the next shot).',
             inputSchema: { type: 'object', properties: { video_path: { type: 'string' } }, required: ['video_path'] },
             run: async (a) => {
                 if (!fileOk(a.video_path)) throw new Error('video_path must be the absolute path of an existing video.');
                 const r = deps.movie.lastFrame(a.video_path);
-                return { content: [text(`Last frame saved.\nFile: ${r.path}`)] };
+                return { content: [text(`Last frame saved.\nFile: ${r.path}`)], structuredContent: { path: r.path } };
             },
         },
         {
             name: 'movie_probe',
+            annotations: READS,
             description: 'Duration, size and whether it has sound, for video, audio or picture files.',
             inputSchema: { type: 'object', properties: { paths: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 50 } }, required: ['paths'] },
             run: async (a) => {
-                const rows = (a.paths || []).map((f) => { try { const i = deps.movie.probeFile(deps.movie.checkMediaPath(f)); return `${f}: ${i.duration ? `${Number(i.duration).toFixed(2)} s` : 'picture'}${i.width ? `, ${i.width}x${i.height}` : ''}${i.hasAudio ? ', has sound' : ''}`; } catch (err) { return `${f}: ${err.message}`; } });
-                return { content: [text(rows.join('\n'))] };
+                const files = (a.paths || []).map((f) => {
+                    try {
+                        const i = deps.movie.probeFile(deps.movie.checkMediaPath(f));
+                        return { path: f, duration: i.duration ? Number(i.duration) : null, width: i.width || null, height: i.height || null, has_audio: !!i.hasAudio };
+                    } catch (err) { return { path: f, error: err.message }; }
+                });
+                const rows = files.map((i) => (i.error ? `${i.path}: ${i.error}` : `${i.path}: ${i.duration ? `${i.duration.toFixed(2)} s` : 'picture'}${i.width ? `, ${i.width}x${i.height}` : ''}${i.has_audio ? ', has sound' : ''}`));
+                return { content: [text(rows.join('\n'))], structuredContent: { files } };
             },
         },
         {
             name: 'movie_library',
+            annotations: READS,
             description: 'Everything the app made that can go into a movie: clips (video studios, H3), pictures and finished movies, newest first.',
             inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Default 30.' } } },
             run: async (a) => {
                 const items = deps.movie.library().slice(0, Math.min(100, Math.max(1, Number(a.limit) || 30)));
-                return { content: [text(items.length ? items.map((i) => `${i.modifiedAt || ''}  [${i.source || ''}]  ${i.path}`).join('\n') : 'Nothing made yet.')] };
+                return {
+                    content: [text(items.length ? items.map((i) => `${i.modifiedAt || ''}  [${i.source || ''}]  ${i.path}`).join('\n') : 'Nothing made yet.')],
+                    structuredContent: { items: items.map((i) => ({ path: i.path, source: i.source || '', modified_at: i.modifiedAt || '' })) },
+                };
             },
         },
         {
             name: 'movie_open_in_app',
+            annotations: MAKES,
             description: 'Load a movie project (the same scenes as movie_render) into the Movie tab, so the user can look at it, change captions or styles and render it from the interface.',
             inputSchema: { type: 'object', properties: { scenes: { type: 'array', minItems: 1, items: { type: 'object' } }, format: { type: 'string' }, fps: { type: 'integer' }, transition: { type: 'string' }, transition_seconds: { type: 'number' }, music_path: { type: 'string' }, music_volume: { type: 'number' }, keep_clip_audio: { type: 'boolean' }, fade_in_out: { type: 'boolean' } }, required: ['scenes'] },
             run: async (a) => {
@@ -501,10 +586,75 @@ function createMediaTools(deps) {
                 return { content: [text(`The project (${project.clips.length} scenes, ${project.width}x${project.height}) is open in the Movie tab.`)] };
             },
         },
+        {
+            name: 'movie_reel',
+            annotations: MAKES,
+            description: 'Make a vertical Instagram/TikTok reel from the photos of one creation (the Reel preset of the Movie tab). '
+                + 'It scores the photos on this PC and opens on the most striking one, keeps the given order for the rest (raw → work → finished) and ends on a call to action that fits the goal. '
+                + 'variant: discovery = 9-12 s, quick, to reach new people; showcase = 15-25 s, slower, more room for the work; both = one of each, to compare which works better. '
+                + 'The photos only get camera moves, so real faces stay exactly as they are: never send the photos listed in faces to generate_video or edit_image. '
+                + 'action: plan (default) returns the scenes, ready for movie_render (you can change captions first); open puts the first plan in the Movie tab; render makes the movie file(s) as a job.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    photos: { type: 'array', minItems: 3, items: { type: 'string' }, description: 'Absolute paths of the photos, in story order.' },
+                    folder: { type: 'string', description: 'Or a folder: its pictures are taken in name order.' },
+                    goal: { type: 'string', enum: Object.keys(reel.GOALS), description: 'followers (default for discovery), showcase (default for showcase) or sell. Changes the pace and the end card.' },
+                    variant: { type: 'string', enum: [...Object.keys(reel.VARIANTS), 'both'], description: 'Default discovery.' },
+                    hook: { type: 'string', description: 'Short text over the first photo, e.g. "Yes, it is 3D printed".' },
+                    title: { type: 'string', description: 'Name of the creation (end card of a showcase).' }, subtitle: { type: 'string' },
+                    call_to_action: { type: 'string', description: 'End card text. Default: "Follow for more" (followers), "Want one?" (sell).' },
+                    handle: { type: 'string', description: 'e.g. @your_account' }, link: { type: 'string', description: 'Shop link for sell (default "Link in bio").' },
+                    captions: { type: 'array', items: { type: 'string' }, description: 'Optional captions for the photos after the opener, in order.' },
+                    faces: { type: 'array', items: { type: 'string' }, description: 'Photos that show a real person: they are kept original and listed in protected_faces.' },
+                    music_path: { type: 'string' }, music_volume: { type: 'number' },
+                    action: { type: 'string', enum: ['plan', 'open', 'render'], description: 'Default plan.' },
+                    wait_seconds: waitProp,
+                },
+            },
+            run: async (a) => {
+                const paths = reel.listPhotos(Array.isArray(a.photos) && a.photos.length ? a.photos : a.folder);
+                paths.forEach((p, i) => { if (!fileOk(p) || !/\.(png|jpe?g|webp)$/i.test(p)) throw new Error(`photos[${i}] must be the absolute path of an existing picture (png, jpg or webp).`); });
+                const faces = new Set((a.faces || []).map((f) => path.resolve(String(f)).toLowerCase()));
+                const scored = deps.reelAnalyse ? await deps.reelAnalyse(paths) : paths.map((p) => ({ path: p, score: 0 }));
+                const photos = scored.map((p) => ({ ...p, faces: faces.has(path.resolve(p.path).toLowerCase()) }));
+                const texts = { hook: a.hook, title: a.title, subtitle: a.subtitle, call_to_action: a.call_to_action, handle: a.handle, link: a.link, captions: a.captions };
+                const plans = (a.variant === 'both' ? Object.keys(reel.VARIANTS) : [a.variant || 'discovery'])
+                    .map((variant) => ({ ...reel.planReel({ photos, variant, goal: a.goal, texts }), ...(a.music_path ? { music_path: a.music_path, music_volume: a.music_volume } : {}) }));
+                const summary = plans.map((p) => `${p.variant} (${p.goal}): ${p.scenes.length} scenes, about ${p.seconds} s, opens on ${path.basename(p.opener)}`).join('\n');
+                const faceNote = plans[0].protected_faces.length ? `\nKept original (real faces): ${plans[0].protected_faces.map((f) => path.basename(f)).join(', ')}` : '';
+
+                if (a.action === 'open') {
+                    const project = buildMovieProject(plans[0], { options: deps.movie.movieOptions(), fileOk });
+                    emit({ phase: 'movie-project', project: buildInterfaceProject(project) });
+                    return { content: [text(`${summary}${faceNote}\nThe ${plans[0].variant} reel is open in the Movie tab.`)], structuredContent: { plans } };
+                }
+                if (a.action === 'render') {
+                    const projects = plans.map((p) => buildMovieProject(p, { options: deps.movie.movieOptions(), fileOk }));
+                    return submit({
+                        tool: 'movie_reel', label: `reel (${plans.map((p) => p.variant).join(' + ')})`, lane: 'movie', cancel: deps.movie.cancel, wait: a.wait_seconds,
+                        run: async () => {
+                            const made = [];
+                            for (const [i, project] of projects.entries()) made.push({ variant: plans[i].variant, ...(await deps.movie.render(project)) });
+                            for (const m of made) emit({ phase: 'media-result', tool: 'movie_reel', kind: 'movie', path: m.path, seconds: m.seconds });
+                            return {
+                                summary: `${summary}${faceNote}\n${made.map((m) => `${m.variant}: ${m.path}`).join('\n')}`,
+                                path: made[0].path, data: { movies: made.map((m) => ({ variant: m.variant, path: m.path, seconds: m.seconds })) },
+                            };
+                        },
+                    });
+                }
+                return {
+                    content: [text(`${summary}${faceNote}\nPass a plan's format, fps, transition, transition_seconds, scenes (and music_path) to movie_render, or call again with action "render".\n${JSON.stringify(plans, null, 2)}`)],
+                    structuredContent: { plans },
+                };
+            },
+        },
 
         // ── Pictures, folders, diagnostics ──
         {
             name: 'edit_picture',
+            annotations: MAKES,
             description: 'Crop, rotate, flip and adjust brightness, contrast and colour of a picture (the app\'s picture editor). The original is untouched; a new PNG is saved. Crop is in fractions of the picture after rotation/flip, e.g. {x:0.3,y:0.05,width:0.4,height:0.4} keeps a box in the upper middle: useful to cut a face out of a bigger photo for a reference.',
             inputSchema: {
                 type: 'object',
@@ -518,17 +668,19 @@ function createMediaTools(deps) {
             run: async (a) => {
                 if (!fileOk(a.image_path)) throw new Error('image_path must be the absolute path of an existing picture.');
                 const r = deps.movie.editPicture({ input: a.image_path, rotate: a.rotate, flip: a.flip, crop: a.crop, brightness: a.brightness, contrast: a.contrast, saturation: a.saturation });
-                return { content: [text(`Picture saved (the original is unchanged).\nFile: ${r.path}`)] };
+                return { content: [text(`Picture saved (the original is unchanged).\nFile: ${r.path}`)], structuredContent: { path: r.path } };
             },
         },
         {
             name: 'show_folder',
+            annotations: MAKES,
             description: 'Open a results folder in the file explorer: media (pictures and video studios), anime (H3 clips), movies (finished movies) or all.',
             inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['media', 'anime', 'movies', 'all'] } }, required: ['kind'] },
             run: async (a) => ({ content: [text(`Opened ${await deps.openFolder(a.kind)}`)] }),
         },
         {
             name: 'debug_log',
+            annotations: READS,
             description: 'The app\'s debug log: what each tool did and why something failed (prompts sent to the models, errors, timings). Use it to diagnose a failed job.',
             inputSchema: { type: 'object', properties: { lines: { type: 'integer', minimum: 1, maximum: 200, description: 'Default 40.' }, level: { type: 'string', enum: ['all', 'warn', 'error'] }, search: { type: 'string' } } },
             run: async (a) => ({ content: [text(deps.debugLog({ lines: Math.min(200, Math.max(1, Number(a.lines) || 40)), level: a.level || 'all', search: a.search || '' }) || 'The log is empty.')] }),
@@ -537,6 +689,7 @@ function createMediaTools(deps) {
         // ── Jobs ──
         {
             name: 'job_status',
+            annotations: READS,
             description: 'State of a long job (video, shot, movie…): queued, running, done (with the file) or failed. wait_seconds keeps waiting for it to finish.',
             inputSchema: { type: 'object', properties: { job_id: { type: 'string' }, wait_seconds: waitProp }, required: ['job_id'] },
             run: async (a) => {
@@ -544,18 +697,24 @@ function createMediaTools(deps) {
                 if (!job) throw new Error(`No job ${a.job_id}. list_jobs shows the recent ones.`);
                 await jobs.wait(job, a.wait_seconds === undefined ? 25 : a.wait_seconds);
                 if (job.state === 'error') throw new Error(`${job.id} failed: ${job.error}`);
-                if (job.state === 'done' && job.result?.content) return { content: job.result.content }; // a finished picture comes back with the picture
-                return { content: [text(describeJob(job))] };
+                // a finished picture comes back with the picture
+                if (job.state === 'done' && job.result?.content) return { content: job.result.content, structuredContent: jobInfo(job) };
+                return { content: [text(describeJob(job))], structuredContent: jobInfo(job) };
             },
         },
         {
             name: 'list_jobs',
-            description: 'The recent jobs of this session, newest first.',
+            annotations: READS,
+            description: 'The recent jobs of this session, newest first, with their progress.',
             inputSchema: { type: 'object', properties: {} },
-            run: async () => ({ content: [text(jobs.list().map((j) => describeJob(j).split('\n')[0]).join('\n') || 'No jobs yet.')] }),
+            run: async () => {
+                const list = jobs.list();
+                return { content: [text(list.map((j) => describeJob(j).split('\n')[0]).join('\n') || 'No jobs yet.')], structuredContent: { jobs: list.map((j) => jobInfo(j)) } };
+            },
         },
         {
             name: 'cancel_job',
+            annotations: STOPS,
             description: 'Cancel a queued or running job.',
             inputSchema: { type: 'object', properties: { job_id: { type: 'string' } }, required: ['job_id'] },
             run: async (a) => {
@@ -567,4 +726,4 @@ function createMediaTools(deps) {
     ];
 }
 
-module.exports = { createJobs, createMediaTools, buildMovieProject, buildInterfaceProject, buildH3Params, parseFormat, describeJob, ASPECTS, QUALITY };
+module.exports = { createJobs, createMediaTools, buildMovieProject, buildInterfaceProject, buildH3Params, parseFormat, describeJob, jobInfo, etaSeconds, ASPECTS, QUALITY };

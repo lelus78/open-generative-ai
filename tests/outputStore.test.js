@@ -56,3 +56,15 @@ test('clearAll empties both folders and reports the freed size', () => {
     assert.deepEqual(fs.readdirSync(inputsDir), []);
     assert.equal(fs.existsSync(path.join(root, 'precious.txt')), true);
 });
+
+test('runFolder names a result by date and content, safe for the file system and never reused', () => {
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'run-folder-'));
+    const when = new Date(2026, 9, 27, 9, 5, 3);
+    const dir = store.runFolder(parent, ['Wan 2.1', 'Una volpe: nella neve / al tramonto? "epic"'], when);
+    assert.equal(path.basename(dir), '2026-10-27 09-05-03 - Wan 2.1 - Una volpe nella neve al tramonto epic');
+    fs.mkdirSync(dir);
+    assert.equal(path.basename(store.runFolder(parent, ['Wan 2.1', 'Una volpe: nella neve / al tramonto? "epic"'], when)), '2026-10-27 09-05-03 - Wan 2.1 - Una volpe nella neve al tramonto epic (2)');
+    assert.equal(path.basename(store.runFolder(parent, ['movie', '', null], when)), '2026-10-27 09-05-03 - movie');
+    assert.equal(store.cleanLabel('a very long prompt about a dragon flying over the mountains at dawn with fire', 30), 'a very long prompt about a');
+    assert.equal(store.cleanLabel('ends with dots...'), 'ends with dots');
+});

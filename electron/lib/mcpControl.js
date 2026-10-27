@@ -1,12 +1,14 @@
 // Wires the MCP server into the app: settings (off by default), the engines behind the tools, and
 // the events that let the interface show what an assistant is doing.
-const { app, ipcMain, BrowserWindow } = require('electron');
+const { app, ipcMain, BrowserWindow, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createHandler, start } = require('./mcpServer');
 const { createTools } = require('./mcpTools');
-const { createMediaTools, createJobs } = require('./mcpMedia');
+const { createMediaTools, createJobs, jobInfo, buildMovieProject, buildInterfaceProject } = require('./mcpMedia');
+const { INSTRUCTIONS, PROMPTS } = require('./mcpGuide');
+const reel = require('./reelDirector');
 const { shared: debug, formatEntries } = require('./debugLog');
 const outputStore = require('./outputStore');
 
@@ -35,6 +37,47 @@ function writeSettings(settings) {
 }
 
 const getMainWindow = () => BrowserWindow.getAllWindows()[0] || null;
+
+/**
+ * The main window as the engines see it: everything still reaches the interface, and the progress events
+ * also feed the job that is running, so job_status and the app can say how far it is and how long is left.
+ */
+function progressWindow() {
+    const report = (update) => jobs.report('gpu', update);
+    return {
+        webContents: {
+            send: (channel, data) => {
+                getMainWindow()?.webContents.send(channel, data);
+                if (!data) return;
+                if (channel === 'local-ai:progress') report({ fraction: data.progress, phase: data.status, message: data.message });
+                else if (channel === 'h3:event' && data.type === 'progress' && data.max) report({ fraction: data.value / data.max, phase: data.phase });
+                else if (channel === 'h3:event' && data.type === 'status') report({ phase: data.phase, message: data.message });
+            },
+        },
+    };
+}
+
+// The app shows the assistant's jobs live (src/lib/externalResults.js); a burst of progress events is sent once.
+let jobsTimer = null;
+function pushJobs() {
+    if (jobsTimer) return;
+    jobsTimer = setTimeout(() => {
+        jobsTimer = null;
+        getMainWindow()?.webContents.send('local-ai:external', { phase: 'jobs', jobs: jobsForApp() });
+    }, 250);
+}
+const jobsForApp = () => jobs.list().slice(0, 20).map((j) => ({ ...jobInfo(j), finished_at: j.finishedAt }));
+jobs.onChange(pushJobs);
+
+/** A photo, small, as raw pixels: enough to tell a sharp, colourful photo from a dull one. */
+function decodeSmall(file) {
+    const image = nativeImage.createFromPath(file);
+    if (image.isEmpty()) throw new Error(`Cannot read ${file}`);
+    const small = image.resize({ width: 256 });
+    const { width, height } = small.getSize();
+    return { data: small.toBitmap(), width, height };
+}
+const analysePhotos = async (paths) => reel.analysePhotos(paths, { decode: decodeSmall });
 
 /** One list of local models from both engines, in the shape the tools expect. */
 async function listModels() {
@@ -68,8 +111,8 @@ function buildDeps() {
     return {
         listModels,
         generate: (params) => (String(params.model).startsWith('wan2gp:')
-            ? wan2gp.generate(params, getMainWindow())
-            : sd.generate(params, getMainWindow())),
+            ? wan2gp.generate(params, progressWindow())
+            : sd.generate(params, progressWindow())),
         enhance: (text) => sd.enhancePrompt(text),
         cancel: () => {
             try { sd.cancelGeneration(); } catch { /* idle */ }
@@ -93,7 +136,8 @@ function buildMediaDeps(deps) {
         generate: deps.generate,
         notify: deps.notify,
         cancelEngines: deps.cancel,
-        h3: (params) => comfy.generate(params, getMainWindow()),
+        h3: (params) => comfy.generate(params, progressWindow()),
+        reelAnalyse: analysePhotos,
         storyboard: (request) => sd.storyboard(request, (message) => deps.notify({ phase: 'status', message })),
         movie: { ...movie, cancel: () => movie.cancel() },
         movieStatus: async () => {
@@ -116,7 +160,10 @@ async function startServer(settings) {
     await stopServer();
     startError = null;
     const deps = { ...buildDeps(), jobs };
-    const handle = createHandler({ name: 'open-generative-ai', version: app.getVersion(), tools: [...createTools(deps), ...createMediaTools(buildMediaDeps(deps))] });
+    const handle = createHandler({
+        name: 'open-generative-ai', version: app.getVersion(), instructions: INSTRUCTIONS, prompts: PROMPTS,
+        tools: [...createTools(deps), ...createMediaTools(buildMediaDeps(deps))],
+    });
     try {
         server = await start({ port: settings.port, token: settings.token, handle });
     } catch (err) {
@@ -160,6 +207,18 @@ function register() {
         writeSettings(next);
         if (next.enabled) await startServer(next); else { await stopServer(); startError = null; }
         return status(next);
+    });
+    ipcMain.handle('mcp:jobs', () => jobsForApp());
+    ipcMain.handle('mcp:cancel-job', (_, id) => { const job = jobs.get(id); return job ? jobs.cancel(job) : false; });
+
+    // The Reel preset of the Movie tab: the same plan as the movie_reel tool, as a project for the interface.
+    ipcMain.handle('movie:reel-plan', async (_, request = {}) => {
+        const paths = (request.photos || []).map(String);
+        const faces = new Set((request.faces || []).map((f) => String(f).toLowerCase()));
+        const photos = (await analysePhotos(paths)).map((p) => ({ ...p, faces: faces.has(p.path.toLowerCase()) }));
+        const plan = reel.planReel({ photos, variant: request.variant, goal: request.goal, texts: request.texts || {} });
+        const project = buildMovieProject(plan, { options: require('./movieMaker').engine.movieOptions() });
+        return { plan, project: buildInterfaceProject(project) };
     });
 
     const settings = readSettings();

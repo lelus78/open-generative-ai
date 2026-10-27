@@ -251,7 +251,7 @@ async function generate(params, mainWindow) {
     const run = { cancelled: false, cancel: () => {} };
     active = run;
     const seed = Number.isInteger(params.seed) && params.seed > 0 ? params.seed : crypto.randomInt(1, 2 ** 31 - 1);
-    const runDir = path.join(RUNS_DIR, `${Date.now()}`);
+    const runDir = require('./outputStore').runFolder(RUNS_DIR, ['H3', params.spec?.story || params.rawPrompt]);
     fs.mkdirSync(runDir, { recursive: true });
     let socket = null;
     let closingSocket = false;

@@ -84,6 +84,7 @@ export function MovieStudio() {
         keepAudio: saved.keepAudio !== false, fadeInOut: saved.fadeInOut !== false,
         music: saved.music || null, musicVolume: saved.musicVolume ?? 0.4,
         animateModel: saved.animateModel || '', animateSeconds: saved.animateSeconds || 5,
+        name: saved.name || '', // set by the Reel preset or an assistant; the folder of the movie is named after it
     };
     let status = null;
     let rendering = false;
@@ -162,7 +163,31 @@ export function MovieStudio() {
                 <button class="mv-add-images px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ Pictures from files</button>
                 <button class="mv-add-history px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ Pictures from Image Studio</button>
                 <button class="mv-add-videos px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-xs font-semibold">+ Videos from files</button>
+                <button class="mv-reel-toggle px-3 py-1.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs font-bold hover:bg-primary/30" title="Turn the pictures of the timeline into a vertical reel">📱 Reel preset</button>
                 <button class="mv-clear ml-auto text-xs text-secondary hover:text-white underline">Clear all</button>
+            </div>
+            <div class="mv-reel hidden rounded-2xl border border-primary/30 bg-primary/5 p-4 flex flex-col gap-3">
+                <span class="text-[11px] text-secondary">Add the photos of one creation in story order (raw → work → finished). The reel opens on the most striking one and ends on a call to action. Photos only get camera moves, so faces stay exactly as they are.</span>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Cut
+                        <select class="mv-reel-variant rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white">
+                            <option value="discovery">Discovery · 9-12 s, quick (new followers)</option><option value="showcase">Showcase · 15-25 s, cinematic</option></select></label>
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Goal
+                        <select class="mv-reel-goal rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white">
+                            <option value="">Fits the cut</option><option value="followers">Get followers</option><option value="showcase">Show the creation</option><option value="sell">Sell it</option></select></label>
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Opening text
+                        <input class="mv-reel-hook rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white" placeholder="e.g. Yes, it is 3D printed"></label>
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Name of the creation
+                        <input class="mv-reel-title rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white"></label>
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Call to action
+                        <input class="mv-reel-cta rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white" placeholder="Default from the goal"></label>
+                    <label class="flex flex-col gap-1 text-xs text-secondary">Account or link
+                        <input class="mv-reel-handle rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white" placeholder="@your_account"></label>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button class="mv-reel-go px-4 py-2 rounded-xl bg-primary text-black text-sm font-bold hover:opacity-90 disabled:opacity-40">Build the reel</button>
+                    <span class="mv-reel-status text-xs text-secondary"></span>
+                </div>
             </div>
             <div class="mv-picker hidden rounded-2xl border border-white/10 bg-white/[0.03] p-3"></div>
             <div class="mv-scenes flex flex-col gap-3"></div>
@@ -177,7 +202,7 @@ export function MovieStudio() {
                     <label class="flex flex-col gap-1 text-xs text-secondary">Between scenes
                         <select class="mv-transition rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white">${TRANSITIONS.map(([v, l]) => option(v, l, v === state.transition)).join('')}</select></label>
                     <label class="flex flex-col gap-1 text-xs text-secondary">Transition length: <b class="mv-tsec-label text-white">${state.transitionSeconds}</b> s
-                        <input type="range" class="mv-tsec accent-primary" min="0.3" max="2" step="0.1" value="${state.transitionSeconds}"></label>
+                        <input type="range" class="mv-tsec accent-primary" min="0.2" max="2" step="0.05" value="${state.transitionSeconds}"></label>
                     <label class="flex flex-col gap-1 text-xs text-secondary">Frame rate
                         <select class="mv-fps rounded-lg bg-white/5 border border-white/10 px-2 py-2 text-sm text-white">${[24, 25, 30].map((v) => option(v, `${v} fps`, v === state.fps)).join('')}</select></label>
                     <div class="flex flex-col gap-2 justify-end text-sm">
@@ -895,7 +920,37 @@ export function MovieStudio() {
         persist();
         renderScenes();
     };
-    $('.mv-clear').onclick = () => { if (state.scenes.length && confirm('Remove all scenes from the timeline? (The files stay on disk.)')) { state.scenes = []; persist(); renderScenes(); } };
+    $('.mv-clear').onclick = () => { if (state.scenes.length && confirm('Remove all scenes from the timeline? (The files stay on disk.)')) { state.scenes = []; state.name = ''; persist(); renderScenes(); } };
+
+    // ── Reel preset: the pictures of the timeline become a vertical reel (electron/lib/reelDirector.js) ──
+    $('.mv-reel-toggle').onclick = () => $('.mv-reel').classList.toggle('hidden');
+    $('.mv-reel-go').onclick = async () => {
+        const reelStatus = $('.mv-reel-status');
+        const photos = state.scenes.filter((s) => s.kind === 'image' && s.path).map((s) => s.path);
+        if (photos.length < 3) { reelStatus.textContent = 'Add at least 3 pictures to the timeline first.'; return; }
+        const go = $('.mv-reel-go');
+        go.disabled = true;
+        reelStatus.textContent = 'Looking at the photos…';
+        try {
+            const handle = $('.mv-reel-handle').value.trim();
+            const { plan, project } = await api().reelPlan({
+                photos, variant: $('.mv-reel-variant').value, goal: $('.mv-reel-goal').value || undefined,
+                texts: {
+                    hook: $('.mv-reel-hook').value.trim(), title: $('.mv-reel-title').value.trim(), call_to_action: $('.mv-reel-cta').value.trim(),
+                    ...(/^https?:|\.\w{2,}\//i.test(handle) ? { link: handle } : { handle }),
+                },
+            });
+            // the music the user already chose stays
+            localStorage.setItem(PROJECT_KEY, JSON.stringify({ ...project, music: state.music, musicVolume: state.musicVolume }));
+            window.dispatchEvent(new CustomEvent('movie:reload-project'));
+            const opener = plan.opener.split(/[\\/]/).pop();
+            const left = plan.left_out.length ? ` · ${plan.left_out.length} photo(s) left out` : '';
+            reelStatus.textContent = `${plan.variant === 'discovery' ? 'Discovery' : 'Showcase'} · about ${plan.seconds} s · opens on ${opener}${left}. Check it with ⚡ Quick preview.`;
+        } catch (err) {
+            reelStatus.textContent = '';
+            showError(err.message);
+        } finally { go.disabled = false; }
+    };
 
     // ── Settings ──────────────────────────────────────────────
     els.format.onchange = () => { state.format = els.format.value; persist(); };
@@ -941,6 +996,7 @@ export function MovieStudio() {
         showError('');
         const [width, height] = state.format.split('x').map(Number);
         const project = {
+            name: state.name || undefined, // names the movie's folder
             width, height, fps: state.fps, transition: state.transition, transitionSeconds: state.transitionSeconds,
             keepClipAudio: state.keepAudio, fadeInOut: state.fadeInOut, quality,
             music: state.music ? { path: state.music, volume: state.musicVolume } : undefined,
@@ -1382,7 +1438,7 @@ export function MovieStudio() {
         Object.assign(state, {
             scenes: p.scenes, format: p.format || state.format, fps: p.fps || state.fps, transition: p.transition || state.transition,
             transitionSeconds: p.transitionSeconds ?? state.transitionSeconds, keepAudio: p.keepAudio !== false, fadeInOut: p.fadeInOut !== false,
-            music: p.music || null, musicVolume: p.musicVolume ?? state.musicVolume,
+            music: p.music || null, musicVolume: p.musicVolume ?? state.musicVolume, name: p.name || '',
         });
         els.format.value = state.format;
         els.transition.value = state.transition;

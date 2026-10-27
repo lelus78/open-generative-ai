@@ -117,6 +117,8 @@ contextBridge.exposeInMainWorld('localAI', {
         pick:    (kind) => ipcRenderer.invoke('movie:pick', kind),
         saveAs:  (file) => ipcRenderer.invoke('movie:save-as', file),
         reveal:  (file) => ipcRenderer.invoke('movie:reveal', file),
+        // Reel preset: { photos, variant: 'discovery'|'showcase', goal: 'followers'|'showcase'|'sell', texts, faces } → { plan, project }
+        reelPlan: (request) => ipcRenderer.invoke('movie:reel-plan', request),
         // { type: 'status' | 'progress', progress: 0..1, message? }
         onEvent: (callback) => {
             const listener = (_, data) => callback(data);
@@ -140,6 +142,9 @@ contextBridge.exposeInMainWorld('localAI', {
     mcp: {
         get: () => ipcRenderer.invoke('mcp:get'),
         set: (patch) => ipcRenderer.invoke('mcp:set', patch),
+        // The assistant's jobs ({ job_id, name, state, progress, eta_seconds, path, finished_at }); live updates come on onExternal with phase 'jobs'.
+        jobs: () => ipcRenderer.invoke('mcp:jobs'),
+        cancelJob: (id) => ipcRenderer.invoke('mcp:cancel-job', id),
     },
     onDownloadProgress: (callback) => {
         const listener = (_, data) => callback(data);

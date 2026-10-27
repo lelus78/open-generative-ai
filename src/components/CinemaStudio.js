@@ -8,7 +8,7 @@ import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { LOCAL_MODEL_CATALOG } from '../lib/localModels.js';
 import { sortByFit } from '../lib/fitBadge.js';
 import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
-import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 
 export function CinemaStudio() {
@@ -477,7 +477,7 @@ export function CinemaStudio() {
                 const blobUrl = URL.createObjectURL(await (await fetch(e.url)).blob());
                 const a = document.createElement('a');
                 a.href = blobUrl;
-                a.download = `cinema-shot-${e.timestamp || Date.now()}.jpg`;
+                a.download = resultFileName(e, 'cinema shot', '.jpg');
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -660,7 +660,7 @@ export function CinemaStudio() {
             const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = blobUrl;
-            a.download = `cinema-shot-${Date.now()}.jpg`;
+            a.download = resultFileName(null, 'cinema shot', '.jpg');
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

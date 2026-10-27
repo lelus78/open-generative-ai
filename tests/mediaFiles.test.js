@@ -15,10 +15,14 @@ test('decodeDataUrl decodes base64 and percent-encoded data URLs', () => {
 test('defaultFileName keeps a real name from the URL and invents one otherwise', () => {
     assert.equal(defaultFileName('file:///C:/runs/123/out/clip%20one.mp4', 'video'), 'clip one.mp4');
     assert.equal(defaultFileName('https://cdn.example.com/x/photo.jpg?sig=1', 'image'), 'photo.jpg');
-    assert.equal(defaultFileName('data:image/png;base64,AAAA', 'image', 42), 'image-42.png');
-    assert.equal(defaultFileName('data:image/jpeg;base64,AAAA', 'image', 7), 'image-7.jpg');
-    assert.equal(defaultFileName('https://cdn.example.com/stream', 'video', 5), 'video-5.mp4');
-    assert.equal(defaultFileName('', 'audio', 9), 'audio-9.mp3');
+    const now = new Date(2026, 9, 27, 10, 5, 3).getTime();
+    assert.equal(defaultFileName('data:image/png;base64,AAAA', 'image', now), '2026-10-27 10-05-03 - image.png');
+    assert.equal(defaultFileName('data:image/jpeg;base64,AAAA', 'image', now), '2026-10-27 10-05-03 - image.jpg');
+    assert.equal(defaultFileName('https://cdn.example.com/stream', 'video', now), '2026-10-27 10-05-03 - video.mp4');
+    assert.equal(defaultFileName('', 'audio', now), '2026-10-27 10-05-03 - audio.mp3');
+    // a generic name inside a named run folder takes the folder's name
+    assert.equal(defaultFileName('file:///E:/movies/2026-10-27%2010-49-34%20-%20reel%20discovery%20-%20Axe/movie.mp4', 'video'), '2026-10-27 10-49-34 - reel discovery - Axe.mp4');
+    assert.equal(defaultFileName('file:///E:/movies/1793093987212/movie.mp4', 'video'), 'movie.mp4');
 });
 
 test('labelsFor follows the system language and falls back to English', () => {

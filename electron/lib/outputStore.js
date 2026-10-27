@@ -71,4 +71,32 @@ function recentResults(runsDir, limit = 10) {
         .map(f => ({ path: f.path, modifiedAt: new Date(f.mtime).toISOString() }));
 }
 
-module.exports = { dirSize, usage, deleteRunContaining, clearAll, recentResults };
+/**
+ * A text made safe as part of a Windows/macOS/Linux file name: no reserved characters, one line, short,
+ * cut at a word. Empty when nothing readable is left.
+ */
+function cleanLabel(text, max = 48) {
+    let s = String(text || '').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (s.length > max) {
+        const cut = s.slice(0, max);
+        s = cut.includes(' ') && cut.lastIndexOf(' ') > max / 2 ? cut.slice(0, cut.lastIndexOf(' ')) : cut;
+    }
+    return s.replace(/[. ]+$/, '');
+}
+
+/**
+ * The folder of a new result, named so a person finds it without opening it:
+ * "2026-10-27 10-39-12 - video Wan 2.1 - a fox in the snow". Date first, so the name order is the time order;
+ * an ASCII separator, because the folder is handed to external tools (ffmpeg, Wan2GP).
+ * The folder is not created; a name already taken gets " (2)", " (3)"…
+ */
+function runFolder(parent, parts, now = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const name = [stamp, ...(Array.isArray(parts) ? parts : [parts]).map((p) => cleanLabel(p)).filter(Boolean)].join(' - ');
+    let dir = path.join(parent, name);
+    for (let i = 2; fs.existsSync(dir); i++) dir = path.join(parent, `${name} (${i})`);
+    return dir;
+}
+
+module.exports = { dirSize, usage, deleteRunContaining, clearAll, recentResults, cleanLabel, runFolder };

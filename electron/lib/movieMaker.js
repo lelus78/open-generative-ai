@@ -8,6 +8,7 @@ const { spawn, spawnSync } = require('child_process');
 const { pathToFileURL } = require('url');
 const { resolveLocalAiPaths } = require('./localInferencePaths');
 const outputStore = require('./outputStore');
+const { runFolder } = outputStore;
 const { styledText, groupOf } = require('./movieText');
 const { buildMovieArgs, buildTitleExportArgs, parseProgress, parseProbe, captionFileText, TRANSITION_LIST, TITLE_STYLES, CAPTION_STYLES } = require('./movieFilter');
 const { shared: debug } = require('./debugLog');
@@ -199,14 +200,25 @@ function send(channel, data) {
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, data);
 }
 
+/** What a movie is about, for its folder name: its name, else the first title or caption, else the first file. */
+function movieLabel(project) {
+    const clips = project.clips || [];
+    const first = (key) => clips.map((c) => String(c[key] || '').trim()).find(Boolean);
+    const file = clips.find((c) => c.path)?.path;
+    return String(project.name || '').trim() || first('title') || first('caption') || (file ? path.parse(file).name : '');
+}
+
 async function render(project) {
     if (active) throw new Error('A movie is already being rendered.');
     const bin = requireFfmpeg();
     const run = { cancelled: false, child: null };
     active = run;
-    const runDir = path.join(MOVIES_DIR, String(Date.now()));
-    fs.mkdirSync(runDir, { recursive: true });
     const isPreview = project.quality === 'preview';
+    // "2026-10-27 10-49-34 - reel discovery - Viking axe", "… - preview - vertical - Sunset" (a reel is vertical already)
+    const label = movieLabel(project);
+    const shape = /^reel\b/i.test(label) ? '' : project.height > project.width ? 'vertical' : project.height === project.width ? 'square' : '';
+    const runDir = runFolder(MOVIES_DIR, [isPreview ? 'preview' : '', shape, label || 'movie']);
+    fs.mkdirSync(runDir, { recursive: true });
     const outPath = path.join(runDir, isPreview ? 'preview.mp4' : 'movie.mp4');
     if (isPreview) {
         // Only the latest preview is kept.
@@ -334,7 +346,7 @@ function readableUrl(file) {
 async function exportTitle(params) {
     const bin = requireFfmpeg();
     const format = params.format === 'webm' ? 'webm' : 'mov';
-    const dir = path.join(MOVIES_DIR, `title-${Date.now()}`);
+    const dir = runFolder(MOVIES_DIR, ['title', params.title]);
     fs.mkdirSync(dir, { recursive: true });
     try {
         const textFile = (name, text) => { const f = path.join(dir, `${name}.txt`); fs.writeFileSync(f, captionFileText(text)); return f; };
@@ -387,7 +399,9 @@ async function upscale({ input, target = '1080p', method = 'fast', model = '', s
     const file = checkMediaPath(input);
     const run = { cancelled: false, child: null, interrupt: { current: null } };
     upscaling = run;
-    const runDir = path.join(MOVIES_DIR, `${Date.now()}`);
+    // "… - upscale 4k - <the folder of the movie it comes from, without its date>"
+    const source = path.basename(path.dirname(file)).replace(/^\d{4}-\d\d-\d\d \d\d-\d\d-\d\d - /, '');
+    const runDir = runFolder(MOVIES_DIR, [`upscale ${target}`, /^\d+$/.test(source) ? path.parse(file).name : source]);
     fs.mkdirSync(runDir, { recursive: true });
     const output = path.join(runDir, 'movie.mp4');
     const send = (data) => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('movie:event', data); };

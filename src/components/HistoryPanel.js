@@ -205,6 +205,20 @@ export function createHistoryPanel(options) {
 
     const isLocal = (entry) => !!entry.path || /^(local:|wan2gp:)/.test(String(entry.model || ''));
 
+    // The same result as a request an AI assistant can send to this app's MCP server (same prompt, model and seed).
+    const assistantRequest = (entry) => {
+        const model = String(entry.model || '');
+        const args = {
+            prompt: entry.prompt || entry.settings?.prompt || '',
+            ...(isLocal(entry) && model ? { model: model.replace(/^local:/, '') } : {}),
+            ...(entry.aspect_ratio ? { aspect_ratio: entry.aspect_ratio } : {}),
+            ...(entry.seed != null ? { seed: Number(entry.seed) } : {}),
+        };
+        const tool = mediaType === 'video' ? 'generate_video' : 'generate_image';
+        return `Use the open-generative-ai tool ${tool} with these arguments:\n${JSON.stringify(args, null, 2)}`;
+    };
+    const copyAssistantRequest = (entry) => navigator.clipboard.writeText(assistantRequest(entry)).catch(err => console.error('[history] Copy failed:', err));
+
     const actionButton = (cls, title, icon, handler) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -256,6 +270,7 @@ export function createHistoryPanel(options) {
             { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
             ...(onReuse && prompt ? [{ label: t('history.reuse'), onClick: () => onReuse(entry) }] : []),
             ...(mediaType === 'image' ? [{ label: t('common.copy'), onClick: () => copyImageToClipboard(entry.url).catch(err => console.error('[history] Copy failed:', err)) }] : []),
+            ...(prompt ? [{ label: t('history.copyForAssistant'), onClick: () => copyAssistantRequest(entry) }] : []),
             { label: t('common.download'), onClick: () => onDownload(entry) },
             'separator',
             { label: t('common.delete'), danger: true, onClick: () => onDelete(entry) },
@@ -292,6 +307,7 @@ export function createHistoryPanel(options) {
         thumb.onclick = (e) => { if (startPick(entry, e)) return; onOpen(entry); render(); };
         thumb.oncontextmenu = (e) => showPopupMenu(e, [
             { label: t('history.open'), onClick: () => { onOpen(entry); render(); } },
+            ...((entry.prompt || entry.settings?.prompt) ? [{ label: t('history.copyForAssistant'), onClick: () => copyAssistantRequest(entry) }] : []),
             { label: t('common.download'), onClick: () => onDownload(entry) },
             'separator',
             { label: t('common.delete'), danger: true, onClick: () => onDelete(entry) },

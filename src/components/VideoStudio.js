@@ -6,7 +6,7 @@ import { createUploadPicker } from './UploadPicker.js';
 import { savePendingJob, removePendingJob, getPendingJobs } from '../lib/pendingJobs.js';
 import { localAI, isLocalAIAvailable } from '../lib/localInferenceClient.js';
 import { fitBadgeHtml, downloadedBadgeHtml, sortByFit } from '../lib/fitBadge.js';
-import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachMediaDrop, feedFileInput, saveHistory, hydrateHistory, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, formatBytes, resultFileName } from '../lib/studioHelpers.js';
 import { createHistoryPanel } from './HistoryPanel.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { isWan2gpModelId, getLocalModelById, localT2VModels, localI2VModels } from '../lib/localModels.js';
@@ -997,7 +997,7 @@ export function VideoStudio() {
             showVideoInCanvas(entry.url, entry.model);
         },
         onDelete: (e, opts) => deleteEntry(e, opts),
-        onDownload: (e) => downloadFile(e.url, `video-${e.id || 'clip'}.mp4`),
+        onDownload: (e) => downloadFile(e.url, resultFileName(e, 'video', '.mp4')),
         onReuse: (e) => {
             newPromptBtn.click();
             textarea.value = e.prompt || '';
@@ -1195,7 +1195,7 @@ export function VideoStudio() {
         const current = resultVideo.src;
         if (current) {
             const entry = generationHistory.find(e => e.url === current);
-            downloadFile(current, `video-${entry?.id || 'clip'}.mp4`);
+            downloadFile(current, resultFileName(entry, 'video', '.mp4'));
         }
     };
 

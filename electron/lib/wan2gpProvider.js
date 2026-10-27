@@ -213,7 +213,7 @@ async function generate(params, mainWindow) {
     const send = (data) => mainWindow?.webContents.send('local-ai:progress', data);
     const imagePath = inputPath(params.image);
     const audioPath = inputPath(params.audio);
-    const runDir = path.join(RUNS_DIR, `${Date.now()}`);
+    const runDir = outputStore.runFolder(RUNS_DIR, [model.name, params.prompt]);
     fs.mkdirSync(runDir, { recursive: true });
     const run = { cancelled: false, cancel: () => {} };
     active = run;

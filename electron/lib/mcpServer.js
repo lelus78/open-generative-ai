@@ -14,11 +14,17 @@ const ok = (id, result) => ({ jsonrpc: '2.0', id, result });
 const fail = (id, code, message) => ({ jsonrpc: '2.0', id: id ?? null, error: { code, message } });
 
 /**
- * @param {{ name: string, version: string, tools: Array<{ name: string, description: string, inputSchema: object, run: (args: object) => Promise<{ content: object[] }> }> }} options
+ * @param {{ name: string, version: string, instructions?: string,
+ *   tools: Array<{ name: string, title?: string, description: string, inputSchema: object, annotations?: object, run: (args: object) => Promise<{ content: object[], structuredContent?: object }> }>,
+ *   prompts?: Array<{ name: string, title?: string, description: string, arguments?: Array<{ name: string, description: string, required?: boolean }>, build: (args: object) => string }> }} options
  * @returns {(message: object) => Promise<object|null>} resolves to the JSON-RPC response, or null for notifications
  */
-function createHandler({ name, version, tools }) {
+function createHandler({ name, version, tools, instructions, prompts = [] }) {
     const byName = new Map(tools.map(t => [t.name, t]));
+    const promptByName = new Map(prompts.map(p => [p.name, p]));
+    // Only the fields of the protocol: `run` and `build` stay on this side.
+    const listTool = ({ name: n, title, description, inputSchema, annotations }) => ({ name: n, ...(title ? { title } : {}), description, inputSchema, ...(annotations ? { annotations } : {}) });
+    const listPrompt = ({ name: n, title, description, arguments: args }) => ({ name: n, ...(title ? { title } : {}), description, arguments: args || [] });
 
     return async function handle(message) {
         if (!message || message.jsonrpc !== '2.0' || typeof message.method !== 'string') {
@@ -34,14 +40,25 @@ function createHandler({ name, version, tools }) {
                 const wanted = params?.protocolVersion;
                 return ok(id, {
                     protocolVersion: SUPPORTED_PROTOCOLS.includes(wanted) ? wanted : SUPPORTED_PROTOCOLS[1],
-                    capabilities: { tools: { listChanged: false } },
+                    capabilities: { tools: { listChanged: false }, ...(prompts.length ? { prompts: { listChanged: false } } : {}) },
                     serverInfo: { name, version },
+                    ...(instructions ? { instructions } : {}),
                 });
             }
             case 'ping':
                 return ok(id, {});
             case 'tools/list':
-                return ok(id, { tools: tools.map(({ name: n, description, inputSchema }) => ({ name: n, description, inputSchema })) });
+                return ok(id, { tools: tools.map(listTool) });
+            case 'prompts/list':
+                return ok(id, { prompts: prompts.map(listPrompt) });
+            case 'prompts/get': {
+                const prompt = promptByName.get(params?.name);
+                if (!prompt) return fail(id, -32602, `Unknown prompt: ${params?.name}`);
+                const args = params?.arguments || {};
+                const missing = (prompt.arguments || []).filter(a => a.required && !String(args[a.name] ?? '').trim()).map(a => a.name);
+                if (missing.length) return fail(id, -32602, `Missing argument: ${missing.join(', ')}`);
+                return ok(id, { description: prompt.description, messages: [{ role: 'user', content: { type: 'text', text: prompt.build(args) } }] });
+            }
             case 'tools/call': {
                 const tool = byName.get(params?.name);
                 if (!tool) return fail(id, -32602, `Unknown tool: ${params?.name}`);

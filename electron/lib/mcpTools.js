@@ -45,6 +45,13 @@ function pickModel(models, kind, requested) {
 
 const text = (value) => ({ type: 'text', text: value });
 
+// Tool annotations: hints that let a client approve the harmless tools on its own. Everything stays on this PC.
+const READS = { readOnlyHint: true, openWorldHint: false };
+const MAKES = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
+const STOPS = { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false };
+
+const modelInfo = (m) => ({ id: m.id, name: m.name, kind: m.kind, engine: m.engine, ready: !!m.ready, downloaded: !!m.downloaded, fit: m.fit || 'unknown', legacy: !!m.legacy, ...(m.reason ? { reason: m.reason } : {}) });
+
 function describeModels(models) {
     if (!models.length) return 'No models found.';
     return models.map(m => {
@@ -55,13 +62,13 @@ function describeModels(models) {
 }
 
 /** Build the content of a tool result for a finished image: a line of text and, when small enough, the picture. */
-function imageResult(result, summary) {
+function imageResult(result, summary, structured = {}) {
     const content = [text(summary)];
     const match = /^data:(image\/[\w+.-]+);base64,(.+)$/s.exec(String(result.url || ''));
     if (match && Buffer.byteLength(match[2], 'base64') <= MAX_INLINE_IMAGE_BYTES) {
         content.push({ type: 'image', data: match[2], mimeType: match[1] });
     }
-    return { content };
+    return { content, structuredContent: structured };
 }
 
 function createTools(deps) {
@@ -72,12 +79,18 @@ function createTools(deps) {
         if (!deps.jobs) return runImageNow(args);
         const job = deps.jobs.start({
             name: `${args.kind === 'edit' ? 'edit' : 'image'} with ${args.model.name}`, lane: 'gpu', cancel: deps.cancel,
-            run: async () => { const out = await runImageNow(args); return { summary: out.content.find((c) => c.type === 'text')?.text || '', content: out.content }; },
+            run: async () => {
+                const out = await runImageNow(args);
+                return { summary: out.content.find((c) => c.type === 'text')?.text || '', content: out.content, path: out.structuredContent.path, data: out.structuredContent };
+            },
         });
         await deps.jobs.wait(job, waitSeconds === undefined ? 50 : waitSeconds);
         if (job.state === 'error') throw new Error(job.error);
-        if (job.state === 'done') return { content: job.result.content };
-        return { content: [text(`${job.id} (${job.name}) is ${job.state === 'queued' ? 'waiting for the engine to be free' : 'still running'} (a heavy model needs minutes the first time it is loaded). Ask again with job_status ${job.id} and wait_seconds.`)] };
+        if (job.state === 'done') return { content: job.result.content, structuredContent: { job_id: job.id, state: 'done', ...job.result.data } };
+        return {
+            content: [text(`${job.id} (${job.name}) is ${job.state === 'queued' ? 'waiting for the engine to be free' : 'still running'} (a heavy model needs minutes the first time it is loaded). Ask again with job_status ${job.id} and wait_seconds.`)],
+            structuredContent: { job_id: job.id, name: job.name, state: job.state },
+        };
     }
 
     async function runImageNow({ tool, kind, model, params, prompt }) {
@@ -105,7 +118,10 @@ function createTools(deps) {
                 result.translatedPrompt ? `The prompt was translated to: ${result.translatedPrompt}` : null,
                 'The result is also shown in the app (history of Image Studio).',
             ].filter(Boolean);
-            return imageResult(result, lines.join('\n'));
+            return imageResult(result, lines.join('\n'), {
+                path: result.path || null, model: model.id, seed: result.seed ?? null,
+                ...(result.translatedPrompt ? { translated_prompt: result.translatedPrompt } : {}),
+            });
         } catch (err) {
             emit({ phase: 'error', tool, message: String(err?.message || err) });
             throw err;
@@ -117,13 +133,15 @@ function createTools(deps) {
             name: 'list_models',
             description: 'List the local AI models of the app with their kind (image, edit, video, lipsync, audio), whether the PC can run them and whether they are already downloaded.',
             inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['image', 'edit', 'video', 'lipsync', 'audio'], description: 'Only models of this kind' } } },
+            annotations: READS,
             run: async ({ kind }) => {
-                const models = await deps.listModels();
-                return { content: [text(describeModels(kind ? models.filter(m => m.kind === kind) : models))] };
+                const models = (await deps.listModels()).filter(m => !kind || m.kind === kind);
+                return { content: [text(describeModels(models))], structuredContent: { models: models.map(modelInfo) } };
             },
         },
         {
             name: 'generate_image',
+            annotations: MAKES,
             description: 'Generate an image from a text prompt with a local model, on this PC. Any language works (non-English prompts are translated). The result also appears in the app. A large model takes minutes the first time it is loaded, then seconds.',
             inputSchema: {
                 type: 'object',
@@ -149,6 +167,7 @@ function createTools(deps) {
         },
         {
             name: 'edit_image',
+            annotations: MAKES,
             description: 'Edit an existing picture with an instruction, e.g. "make the dog black" or "change the sky to sunset", keeping the rest of the picture. Runs locally; the result also appears in the app.',
             inputSchema: {
                 type: 'object',
@@ -179,24 +198,33 @@ function createTools(deps) {
             name: 'enhance_prompt',
             description: 'Rewrite a short idea into a detailed English image prompt with the local Qwen model (setting, composition, light, mood, style). Returns the text only.',
             inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
-            run: async ({ prompt }) => ({ content: [text(await deps.enhance(String(prompt || '')))] }),
+            annotations: READS,
+            run: async ({ prompt }) => {
+                const enhanced = await deps.enhance(String(prompt || ''));
+                return { content: [text(enhanced)], structuredContent: { prompt: enhanced } };
+            },
         },
         {
             name: 'recent_results',
             description: 'List the most recent files generated by the app (newest first) with their path.',
             inputSchema: { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 50, description: 'Default 10' } } },
+            annotations: READS,
             run: async ({ limit }) => {
                 const items = deps.recent(Math.min(50, Math.max(1, Number(limit) || 10)));
-                return { content: [text(items.length ? items.map(i => `${i.modifiedAt}  ${i.path}`).join('\n') : 'No results yet.')] };
+                return {
+                    content: [text(items.length ? items.map(i => `${i.modifiedAt}  ${i.path}`).join('\n') : 'No results yet.')],
+                    structuredContent: { items: items.map(i => ({ path: i.path, modified_at: i.modifiedAt })) },
+                };
             },
         },
         {
             name: 'cancel_generation',
             description: 'Stop the generation that is running in the app, if any.',
             inputSchema: { type: 'object', properties: {} },
+            annotations: STOPS,
             run: async () => { deps.cancel(); return { content: [text('Cancel requested.')] }; },
         },
     ];
 }
 
-module.exports = { createTools, pickModel, rankModels, describeModels, ASPECT_RATIOS };
+module.exports = { createTools, pickModel, rankModels, describeModels, ASPECT_RATIOS, READS, MAKES, STOPS };

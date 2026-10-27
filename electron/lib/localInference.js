@@ -719,9 +719,9 @@ async function generate(params, mainWindow) {
                 // and "Delete" / "Delete all" / the usage figure already cover that folder.
                 let savedPath;
                 try {
-                    const runDir = path.join(DATA_DIR, 'wan2gp', 'runs', `sd-${Date.now()}`);
+                    const runDir = require('./outputStore').runFolder(path.join(DATA_DIR, 'wan2gp', 'runs'), [model.name, params.prompt]);
                     fs.mkdirSync(runDir, { recursive: true });
-                    savedPath = path.join(runDir, 'image.png');
+                    savedPath = path.join(runDir, `${require('./outputStore').cleanLabel(params.prompt) || 'image'}.png`);
                     fs.writeFileSync(savedPath, imgBuffer);
                 } catch { savedPath = undefined; }
                 fs.unlinkSync(outPath);

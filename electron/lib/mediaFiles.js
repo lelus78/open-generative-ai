@@ -40,19 +40,31 @@ function decodeDataUrl(url) {
     return { mime: mime || 'application/octet-stream', buffer: isBase64 ? Buffer.from(payload, 'base64') : Buffer.from(decodeURIComponent(payload)) };
 }
 
-/** A sensible default file name for "Save as": keep the URL's own name when it has one. */
+// Names a result gets inside its run folder; the folder says what it is ("2026-10-27 10-49-34 - reel discovery - …").
+const GENERIC_NAMES = /^(movie|preview|image|output|out|result)\.\w+$/i;
+
+/**
+ * A sensible default file name for "Save as": the URL's own name when it says something, else the name of its
+ * folder, else the date and the kind ("2026-10-27 10-49-34 - image.png"), so saved files sort by time.
+ */
 function defaultFileName(srcURL, mediaType, now = Date.now()) {
     const fallbackExt = { image: '.png', video: '.mp4', audio: '.mp3' }[mediaType] || '';
+    const d = new Date(now);
+    const pad = (n) => String(n).padStart(2, '0');
+    const dated = (ext) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())} - ${mediaType || 'file'}${ext}`;
     try {
         const url = String(srcURL || '');
         if (url.startsWith('data:')) {
             const mime = /^data:([^;,]*)/.exec(url)?.[1];
-            return `${mediaType || 'file'}-${now}${MIME_EXTENSIONS[mime] || fallbackExt}`;
+            return dated(MIME_EXTENSIONS[mime] || fallbackExt);
         }
-        const name = path.basename(decodeURIComponent(new URL(url).pathname));
+        const file = decodeURIComponent(new URL(url).pathname);
+        const name = path.basename(file);
+        const folder = path.basename(path.dirname(file));
+        if (name && path.extname(name) && GENERIC_NAMES.test(name) && /^\d{4}-\d\d-\d\d /.test(folder)) return `${folder}${path.extname(name)}`;
         if (name && path.extname(name)) return name;
     } catch { /* not a parseable URL */ }
-    return `${mediaType || 'file'}-${now}${fallbackExt}`;
+    return dated(fallbackExt);
 }
 
 module.exports = { LABELS, labelsFor, decodeDataUrl, defaultFileName };

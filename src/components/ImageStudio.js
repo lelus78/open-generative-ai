@@ -14,7 +14,7 @@ import { fitBadgeHtml, downloadedBadgeHtml, sortByFit, loadFitInfo } from '../li
 import { isAnimeAvailable, sendToAnime } from '../lib/animeHandoff.js';
 import { isMovieAvailable, sendToMovie } from '../lib/movieHandoff.js';
 import { SHEETS, applySheet, pickSheetAspect, nextSheet } from '../lib/contactSheet.js';
-import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel } from '../lib/studioHelpers.js';
+import { attachPromptHistory, attachImageCopy, attachMediaDrop, saveHistory, hydrateHistory, attachImageZoom, removeGenerationFile, clearHistoryEntries, attachResultMenu, localProgressLabel, resultFileName } from '../lib/studioHelpers.js';
 import { takeEntryToShow } from '../lib/externalResults.js';
 import { MAX_REPEATS, planVariants } from '../lib/promptVariants.js';
 import { createHistoryPanel } from './HistoryPanel.js';
@@ -1099,7 +1099,7 @@ export function ImageStudio() {
         },
         onOpen: (e) => showImageInCanvas(e.url),
         onDelete: (e, opts) => deleteEntry(e, opts),
-        onDownload: (e) => downloadImage(e.url, `muapi-${e.id || 'image'}.jpg`),
+        onDownload: (e) => downloadImage(e.url, resultFileName(e, 'image', '.jpg')),
         onReuse: (e) => {
             newPromptBtn.click();
             textarea.value = e.prompt || '';
@@ -1302,7 +1302,7 @@ export function ImageStudio() {
         const current = resultImg.src;
         if (current) {
             const entry = generationHistory.find(e => e.url === current);
-            downloadImage(current, `muapi-${entry?.id || 'image'}.jpg`);
+            downloadImage(current, resultFileName(entry, 'image', '.jpg'));
         }
     };
 
