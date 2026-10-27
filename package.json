@@ -3,7 +3,7 @@
   "description": "Local-first AI studio for images, video, lip sync, music and movies. Runs on your own PC and can be driven by an AI assistant through MCP.",
   "homepage": "https://github.com/lelus78/open-generative-ai",
   "private": true,
-  "version": "2.2.5",
+  "version": "2.2.6",
   "license": "MIT",
   "workspaces": [
     "packages/studio",
@@ -27,6 +27,7 @@
     "electron:dev": "npm run vite:build && electron .",
     "electron:build": "vite build && electron-builder --mac",
     "electron:build:win": "vite build && electron-builder --win",
+    "release:check": "node scripts/release-check.js",
     "electron:build:linux": "vite build && electron-builder --linux",
     "electron:build:linux:dir": "vite build && electron-builder --linux dir",
     "electron:build:linux:arm64:dir": "vite build && electron-builder --linux dir --arm64",
