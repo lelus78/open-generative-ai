@@ -18,6 +18,7 @@ const { resolveLocalAiPaths } = require('./localInferencePaths');
 const { withWan2gpAvailability } = require('./wan2gpModelAvailability');
 const { WAN2GP_CATALOG, getModelById, buildWan2gpSettings } = require('./wan2gpCatalog');
 const local = require('./wan2gpLocal');
+const { shared: debug } = require('./debugLog');
 const wan2gpServer = require('./wan2gpServer');
 const outputStore = require('./outputStore');
 const { getHardwareProfile } = require('./hardwareProfile');
@@ -201,7 +202,19 @@ async function generateViaServer({ url, model, params, imagePath, runDir, run, s
     return { ...mediaResult(mediaPath, settings.seed), ...(translated?.translatedPrompt ? { translatedPrompt: translated.translatedPrompt } : {}) };
 }
 
+// Generated sounds are limited to −1 dBFS before they are handed back (see audioLevel.js).
 async function generate(params, mainWindow) {
+    const result = await generateMedia(params, mainWindow);
+    if (result?.mediaType === 'audio') {
+        try {
+            const ffmpeg = require('./movieMaker').findFfmpeg().bin;
+            if (require('./audioLevel').limitFile(result.path, ffmpeg)) debug.info('audio', 'limited to -1 dBFS', { file: result.path });
+        } catch (err) { debug.warn('audio', 'limiter skipped', { error: err.message }); }
+    }
+    return result;
+}
+
+async function generateMedia(params, mainWindow) {
     if (active) throw new Error('A Wan2GP generation is already running.');
     const model = getModelById(params.model);
     if (!model) throw new Error(`Unknown Wan2GP model: ${params.model}`);

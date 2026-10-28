@@ -11,6 +11,7 @@
 // `duration` of a video is its usable length (probed); of an image, how long it stays on screen.
 
 const { titleFilters, captionFilters, TITLE_STYLES, CAPTION_STYLES } = require('./movieText');
+const { movieLoudnessFilter } = require('./audioLevel');
 
 // ffmpeg xfade transitions offered to the user ('none' is a straight cut).
 const TRANSITION_LIST = [
@@ -201,6 +202,12 @@ function buildMovieArgs(project, outPath) {
     } else if (project.fadeInOut !== false && total > 2) {
         filters.push(`[${aLabel}]afade=t=in:st=0:d=0.4,afade=t=out:st=${round3(total - 0.7)}:d=0.7[afinal]`);
         audioMap = '[afinal]';
+    }
+    // The finished mix at YouTube's loudness (−14 LUFS), so clips, music and effects from different models
+    // do not come out too quiet or too loud. Previews skip it (they are only for checking the edit).
+    if (project.loudness !== false && !project.preview) {
+        filters.push(`${audioMap}${movieLoudnessFilter()}[aloud]`);
+        audioMap = '[aloud]';
     }
 
     args.push(

@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('localAI', {
         text: () => ipcRenderer.invoke('debug:text'),
         clear: () => ipcRenderer.invoke('debug:clear'),
         setVerbose: (value) => ipcRenderer.invoke('debug:set-verbose', value),
+        report: () => ipcRenderer.invoke('debug:report'),
         openFolder: () => ipcRenderer.invoke('debug:open-folder'),
         log: (scope, level, message, data) => ipcRenderer.send('debug:log', scope, level, message, data),
         onEntry: (callback) => {

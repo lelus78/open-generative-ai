@@ -196,11 +196,20 @@ function createTools(deps) {
         },
         {
             name: 'enhance_prompt',
-            description: 'Rewrite a short idea into a detailed English image prompt with the local Qwen model (setting, composition, light, mood, style). Returns the text only.',
-            inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+            description: 'Rewrite a short idea (any language) into a detailed English prompt with the local Qwen model, written for the kind of media: '
+                + 'image (setting, composition, light, mood, style), video (action, camera movement), music (genre, instruments, mood, BPM) '
+                + 'or sfx (what makes the sound and what it does, in plain words, as Stable Audio wants it). Returns the text only.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    prompt: { type: 'string' },
+                    kind: { type: 'string', enum: ['image', 'video', 'music', 'sfx'], description: 'What the prompt is for. Default image.' },
+                },
+                required: ['prompt'],
+            },
             annotations: READS,
-            run: async ({ prompt }) => {
-                const enhanced = await deps.enhance(String(prompt || ''));
+            run: async ({ prompt, kind }) => {
+                const enhanced = await deps.enhance(String(prompt || ''), ['image', 'video', 'music', 'sfx'].includes(kind) ? kind : 'image');
                 return { content: [text(enhanced)], structuredContent: { prompt: enhanced } };
             },
         },

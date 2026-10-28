@@ -1,9 +1,11 @@
 // Connects the shared debug log (debugLog.js) to the window: the Debug panel reads it, clears it, and the
 // renderer can add its own lines. The log file lives next to the other local-ai settings.
-const { ipcMain, app, BrowserWindow, shell } = require('electron');
+const { ipcMain, app, BrowserWindow, shell, clipboard } = require('electron');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
 const { shared, formatEntries, gpuSnapshot } = require('./debugLog');
+const { anonymize, issueUrl } = require('./problemReport');
 
 const LEVELS = new Set(['info', 'warn', 'error']);
 
@@ -34,6 +36,17 @@ function register() {
     // Lines written by the window itself (what the Image studio sent, errors on screen...).
     ipcMain.on('debug:log', (_, scope, level, message, data) => {
         shared[LEVELS.has(level) ? level : 'info'](`ui:${String(scope || 'app').slice(0, 24)}`, String(message || '').slice(0, 500), data);
+    });
+    // "Report a problem": the whole anonymized log goes to the clipboard, its end into a prefilled GitHub issue.
+    ipcMain.handle('debug:report', async () => {
+        const who = { home: os.homedir(), user: os.userInfo().username };
+        const log = anonymize(formatEntries(shared.entries()), who);
+        clipboard.writeText(log);
+        const hw = await require('./hardwareProfile').getHardwareProfile().catch(() => null);
+        const gpuText = hw?.gpuName ? `${hw.gpuName}${hw.vramGB ? ` ${hw.vramGB} GB` : ''}` : '';
+        const url = issueUrl({ version: app.getVersion(), platform: `${os.type()} ${os.release()} ${process.arch}`, gpu: gpuText, log });
+        await shell.openExternal(url);
+        return { ok: true };
     });
     ipcMain.handle('debug:open-folder', () => {
         const file = shared.getFile();

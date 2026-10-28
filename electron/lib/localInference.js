@@ -800,6 +800,6 @@ module.exports = {
     generate,
     listModels,
     cancelGeneration,
-    enhancePrompt: (text) => getTranslator().enhance(text),
+    enhancePrompt: (text, kind) => getTranslator().enhance(text, undefined, kind),
     storyboard: (request, onStatus) => getTranslator().storyboard(request || {}, onStatus),
 };

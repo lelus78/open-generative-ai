@@ -113,7 +113,7 @@ function buildDeps() {
         generate: (params) => (String(params.model).startsWith('wan2gp:')
             ? wan2gp.generate(params, progressWindow())
             : sd.generate(params, progressWindow())),
-        enhance: (text) => sd.enhancePrompt(text),
+        enhance: (text, kind) => sd.enhancePrompt(text, kind),
         cancel: () => {
             try { sd.cancelGeneration(); } catch { /* idle */ }
             try { wan2gp.cancelGeneration(); } catch { /* idle */ }

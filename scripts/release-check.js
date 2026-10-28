@@ -26,6 +26,18 @@ let failed = false;
 const ok = (msg) => console.log(`  ok    ${msg}`);
 const fail = (msg) => { failed = true; console.log(`  FAIL  ${msg}`); };
 const sha512 = (file) => crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64');
+/**
+ * Same content? Retried for a few seconds: right after 7-Zip writes a file, Windows (the antivirus scan) can
+ * still be touching it, and the first read of a freshly unpacked exe once gave a different hash.
+ */
+async function sameFile(a, b) {
+    if (!fs.existsSync(a) || !fs.existsSync(b) || fs.statSync(a).size !== fs.statSync(b).size) return false;
+    for (let i = 0; i < 5; i++) {
+        if (sha512(a) === sha512(b)) return true;
+        await new Promise((r) => setTimeout(r, 2000));
+    }
+    return false;
+}
 const sevenZ = (args) => spawnSync(sevenZip, args, { encoding: 'utf-8', maxBuffer: 64 * 1024 * 1024 });
 
 async function main() {
@@ -55,10 +67,14 @@ async function main() {
         if (unpacked.status !== 0) { fail('could not unpack the app archive'); return; }
         const builtExe = path.join(release, 'win-unpacked', exeName);
         const shippedExe = path.join(appDir, exeName);
-        if (fs.existsSync(builtExe) && fs.existsSync(shippedExe) && sha512(builtExe) === sha512(shippedExe)) ok(`${exeName} in the installer is identical to win-unpacked (${Math.round(fs.statSync(shippedExe).size / 1048576)} MB)`);
-        else { fail(`${exeName} in the installer differs from win-unpacked`); return; }
+        if (await sameFile(builtExe, shippedExe)) ok(`${exeName} in the installer is identical to win-unpacked (${Math.round(fs.statSync(shippedExe).size / 1048576)} MB)`);
+        else {
+            const size = (f) => (fs.existsSync(f) ? fs.statSync(f).size : 'missing');
+            fail(`${exeName} in the installer differs from win-unpacked (installer: ${size(shippedExe)} bytes, build: ${size(builtExe)} bytes)`);
+            return;
+        }
         const builtAsar = path.join(release, 'win-unpacked', 'resources', 'app.asar');
-        if (sha512(builtAsar) === sha512(path.join(appDir, 'resources', 'app.asar'))) ok('app.asar in the installer is identical to win-unpacked'); else fail('app.asar in the installer differs from win-unpacked');
+        if (await sameFile(builtAsar, path.join(appDir, 'resources', 'app.asar'))) ok('app.asar in the installer is identical to win-unpacked'); else fail('app.asar in the installer differs from win-unpacked');
 
         // 4. the shipped program starts
         await startsUp(shippedExe);

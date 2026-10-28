@@ -8,7 +8,16 @@ const INSTRUCTIONS = [
     'Long work runs as a job: the answer is a job id when it is not done in time. Call job_status with wait_seconds (up to 55) to wait for it; it reports progress and an estimate of the time left. One GPU job runs at a time; the others queue.',
     'Results carry structured content (path, seed, job_id, progress) next to the text: use the paths it returns, all on this PC.',
     'Real people: a video or edit model can change a face. When a photo shows a real person, keep it as a picture with a camera move (movie_render, movie_reel) unless the user asks otherwise.',
-    'When something fails, debug_log says why.',
+    'Prompts: enhance_prompt with kind image, video, music or sfx writes them the way each model wants. Sound effects want one plain sentence about the sound itself ("car tires screeching on asphalt as the car speeds away"), not a story; music wants genre, instruments, mood and BPM.',
+    'Reading errors (debug_log has the details; do not keep changing the prompt for an error that is not about the prompt):',
+    '- "out of memory" / "CUDA error": the model does not fit next to what is loaded. Wait for other jobs, use a smaller size or shorter clip, or a lighter model from list_models.',
+    '- "not downloaded" / "not installed" / a model marked unavailable in list_models: tell the user what is missing (Settings → Local Models) or pick a ready model; do not retry the same call.',
+    '- "already running" / "wait for it to finish": one GPU job at a time. Use job_status or list_jobs and try again when it is done.',
+    '- "Wan2GP is not configured" / "ffmpeg was not found": a setup step for the user, not something a retry fixes.',
+    '- "must be the absolute path of an existing …": pass a full path on this PC, as returned by a previous result.',
+    '- "Generation cancelled": the user or cancel_job stopped it. Do not start it again unless asked.',
+    '- A result that looks wrong (a different person, missing object): change the prompt or the references, not the settings.',
+    'When something else fails, debug_log says why.',
 ].join('\n');
 
 const arg = (name, description, required = false) => ({ name, description, required });

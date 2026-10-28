@@ -82,17 +82,30 @@ export function SettingsModal(onClose) {
             <button id="about-check" style="padding:0.45rem 0.9rem;border-radius:0.5rem;background:var(--color-primary,#22d3ee);color:#000;font-size:0.75rem;font-weight:700;border:none;cursor:pointer;">Check for updates</button>
             <span id="about-update" style="font-size:0.75rem;color:rgba(255,255,255,0.5);"></span>
         </div>
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <button id="about-report" style="padding:0.45rem 0.9rem;border-radius:0.5rem;background:rgba(255,255,255,0.08);color:#fff;font-size:0.75rem;font-weight:700;border:1px solid rgba(255,255,255,0.15);cursor:pointer;">🐞 Report a problem</button>
+            <span id="about-report-note" style="font-size:0.72rem;color:rgba(255,255,255,0.45);">Opens a GitHub issue filled in with the version and the end of the debug log (home folder and user name removed). Nothing is sent until you submit it.</span>
+        </div>
         <div style="line-height:1.6;">
             <a href="https://github.com/lelus78/open-generative-ai" target="_blank" style="color:var(--color-primary,#22d3ee);">github.com/lelus78/open-generative-ai</a> — source, releases, issues<br>
             <a href="https://github.com/lelus78/open-generative-ai/releases" target="_blank" style="color:var(--color-primary,#22d3ee);">Releases</a> ·
-            <a href="https://github.com/lelus78/open-generative-ai/issues" target="_blank" style="color:var(--color-primary,#22d3ee);">Report a problem</a>
+            <a href="https://github.com/lelus78/open-generative-ai/issues" target="_blank" style="color:var(--color-primary,#22d3ee);">Issues</a>
         </div>
-        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">MIT licence. A fork of Anil-matcha/Open-Generative-AI. For a bug report use the bug icon in the top bar (Debug log → Copy all) and paste it in the issue.</div>
+        <div style="font-size:0.72rem;color:rgba(255,255,255,0.4);line-height:1.5;">MIT licence. A fork of Anil-matcha/Open-Generative-AI.</div>
     `;
     const aboutVersion = aboutPanel.querySelector('#about-version');
     const aboutUpdate = aboutPanel.querySelector('#about-update');
     const aboutApi = window.localAI;
     aboutApi?.about?.().then((a) => { aboutVersion.textContent = `Version ${a.version} · ${a.platform} · Electron ${a.electron}`; }).catch(() => {});
+    const reportBtn = aboutPanel.querySelector('#about-report');
+    if (!aboutApi?.debug?.report) reportBtn.parentElement.style.display = 'none';
+    reportBtn.onclick = async () => {
+        const note = aboutPanel.querySelector('#about-report-note');
+        try {
+            await aboutApi.debug.report();
+            note.textContent = 'The issue form is open in your browser. The whole log is also on the clipboard, if the form needs more.';
+        } catch (e) { note.textContent = `Could not open the report: ${e.message}`; }
+    };
     aboutPanel.querySelector('#about-check').onclick = async () => {
         aboutUpdate.textContent = 'Checking…';
         const r = await aboutApi?.checkUpdate?.().catch((e) => ({ state: 'error', message: e.message }));
